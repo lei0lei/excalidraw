@@ -13,6 +13,7 @@ const FORMULA_PADDING_X = 16;
 const FORMULA_PADDING_Y = 12;
 const FORMULA_MAX_WIDTH = 720;
 const DEFAULT_FORMULA_COLOR = "#1d1d3a";
+const FORMULA_MEASUREMENT_SLACK = 6;
 
 export const DEFAULT_MATH_FORMULA = "\\frac{a}{b}=c";
 
@@ -48,19 +49,30 @@ export const normalizeMathFormulaStyle = (
   renderStyle: DEFAULT_MATH_FORMULA_STYLE.renderStyle,
 });
 
-export const renderMathFormulaMarkup = (
+const renderMathFormula = (
   formula: string,
   style?: Partial<MathFormulaStyle> | null,
+  output: "htmlAndMathml" | "mathml" = "htmlAndMathml",
 ) => {
   const normalizedStyle = normalizeMathFormulaStyle(style);
 
   return katex.renderToString(formula, {
     displayMode: normalizedStyle.displayMode,
-    output: "mathml",
+    output,
     throwOnError: false,
     strict: "ignore",
   });
 };
+
+export const renderMathFormulaMarkup = (
+  formula: string,
+  style?: Partial<MathFormulaStyle> | null,
+) => renderMathFormula(formula, style, "htmlAndMathml");
+
+export const renderMathFormulaExportMarkup = (
+  formula: string,
+  style?: Partial<MathFormulaStyle> | null,
+) => renderMathFormula(formula, style, "mathml");
 
 const hashFormula = (formula: string) => {
   let hash = 0;
@@ -143,7 +155,7 @@ const measureFormula = (
     FORMULA_PADDING_X * 2 + formulaLengthFallback(markup, style.fontSize),
   );
   const height = Math.max(
-    Math.ceil(rect.height) || 0,
+    (Math.ceil(rect.height) || 0) + FORMULA_MEASUREMENT_SLACK,
     FORMULA_PADDING_Y * 2 + style.fontSize,
   );
 
@@ -246,7 +258,10 @@ export const createMathFormulaAsset = async (
   }
 
   const normalizedStyle = normalizeMathFormulaStyle(style);
-  const markup = renderMathFormulaMarkup(normalizedFormula, normalizedStyle);
+  const markup = renderMathFormulaExportMarkup(
+    normalizedFormula,
+    normalizedStyle,
+  );
   const { width, height } = measureFormula(
     normalizedFormula,
     markup,
