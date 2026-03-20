@@ -54,18 +54,25 @@ import {
   restoreAppState,
   restoreElements,
 } from "@excalidraw/excalidraw/data/restore";
-import { newElementWith } from "@excalidraw/element";
-import { isInitializedImageElement } from "@excalidraw/element";
+import {
+  isEmbeddableElement,
+  isInitializedImageElement,
+  newElementWith,
+  newEmbeddableElement,
+} from "@excalidraw/element";
 import clsx from "clsx";
 import {
   parseLibraryTokensFromUrl,
   useHandleLibrary,
 } from "@excalidraw/excalidraw/data/library";
+import { useTunnels } from "@excalidraw/excalidraw/context/tunnels";
 
 import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconcile";
 import type { RestoredDataState } from "@excalidraw/excalidraw/data/restore";
 import type {
+  ExcalidrawEmbeddableElement,
   FileId,
+  NonDeleted,
   NonDeletedExcalidrawElement,
   OrderedExcalidrawElement,
 } from "@excalidraw/element/types";
@@ -142,13 +149,56 @@ import DebugCanvas, {
 } from "./components/DebugCanvas";
 import { AIComponents } from "./components/AI";
 import { ExcalidrawPlusIframeExport } from "./ExcalidrawPlusIframeExport";
+import { MathFormulaEmbeddable } from "./components/MathFormulaEmbeddable";
+import { MathFormulaDialog } from "./components/MathFormulaDialog";
 
 import "./index.scss";
 
 import { ExcalidrawPlusPromoBanner } from "./components/ExcalidrawPlusPromoBanner";
 import { AppSidebar } from "./components/AppSidebar";
+import { WorkspacePage } from "./workspace/WorkspacePage";
+import {
+  createGoogleDriveFile,
+  downloadGoogleDriveFile,
+  pickGoogleDriveRootFolder,
+  updateGoogleDriveFile,
+} from "./workspace/data/googleDrive";
+import {
+  createLocalFile,
+  getStoredLocalRootFolder,
+  pickLocalRootFolder,
+  readLocalFile,
+  updateLocalFile,
+} from "./workspace/data/localDirectory";
+import {
+  buildExcalidrawBlob,
+  normalizeExcalidrawFileName,
+} from "./workspace/data/saveManager";
+import {
+  createMathFormulaAsset,
+  getMathFormulaEmbeddableLink,
+  measureMathFormulaDimensions,
+  normalizeMathFormulaStyle,
+  type MathFormulaStyle,
+} from "./math/formula";
 
 import type { CollabAPI } from "./collab/Collab";
+import type { GoogleDriveFile } from "./workspace/data/googleDrive";
+import type {
+  LocalDirectoryFile,
+  LocalDirectoryFolder,
+} from "./workspace/data/localDirectory";
+import type { CloudFileRef } from "./workspace/data/saveManager";
+
+type MathFormulaDialogState = {
+  mode: "insert" | "edit";
+  initialValue?: string;
+  initialStyle?: MathFormulaStyle;
+  sceneX?: number;
+  sceneY?: number;
+  toolLocked?: boolean;
+  targetElementId?: string;
+};
 
 polyfill();
 
@@ -166,10 +216,84 @@ declare global {
 
   interface WindowEventMap {
     beforeinstallprompt: BeforeInstallPromptEvent;
+    appinstalled: Event;
   }
 }
 
 let pwaEvent: BeforeInstallPromptEvent | null = null;
+const pwaInstallStateListeners = new Set<() => void>();
+
+const WorkspaceExplorerIcon = (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <g
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M5 4.75h14a1.75 1.75 0 0 1 1.75 1.75v11a1.75 1.75 0 0 1-1.75 1.75H5A1.75 1.75 0 0 1 3.25 17.5v-11A1.75 1.75 0 0 1 5 4.75Z" />
+      <path d="M8.5 4.75v14.5" />
+      <path d="M11.75 9h5" />
+      <path d="M11.75 12.5h5" />
+      <path d="M11.75 16h3.25" />
+    </g>
+  </svg>
+);
+
+const WorkspaceEntryTrigger = ({
+  onOpenWorkspace,
+}: {
+  onOpenWorkspace: () => void;
+}) => {
+  const { MainMenuTunnel } = useTunnels();
+  const editorInterface = useEditorInterface();
+
+  if (editorInterface.formFactor === "phone") {
+    return null;
+  }
+
+  return (
+    <MainMenuTunnel.In>
+      <button
+        type="button"
+        className="dropdown-menu-button main-menu-trigger workspace-canvas-trigger"
+        title="Open workspace"
+        aria-label="Open workspace"
+        onClick={onOpenWorkspace}
+      >
+        {WorkspaceExplorerIcon}
+      </button>
+    </MainMenuTunnel.In>
+  );
+};
+
+const isPWAInstalled = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    Boolean(
+      (window.navigator as Navigator & { standalone?: boolean }).standalone,
+    )
+  );
+};
+
+const shouldShowPWAInstallButton = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return !isPWAInstalled() && "serviceWorker" in window.navigator;
+};
+
+const notifyPWAInstallStateListeners = () => {
+  pwaInstallStateListeners.forEach((listener) => {
+    listener();
+  });
+};
 
 // Adding a listener outside of the component as it may (?) need to be
 // subscribed early to catch the event.
@@ -183,10 +307,17 @@ window.addEventListener(
     event.preventDefault();
     // cache for later use
     pwaEvent = event;
+    notifyPWAInstallStateListeners();
   },
 );
 
+window.addEventListener("appinstalled", () => {
+  pwaEvent = null;
+  notifyPWAInstallStateListeners();
+});
+
 let isSelfEmbedding = false;
+const MATH_FORMULA_DOUBLE_CLICK_MS = 350;
 
 if (window.self !== window.top) {
   try {
@@ -199,6 +330,49 @@ if (window.self !== window.top) {
     // ignore
   }
 }
+
+const getMathFormulaElementData = (
+  element: NonDeletedExcalidrawElement | null,
+): {
+  source: string;
+  style: MathFormulaStyle;
+  intrinsicWidth?: number;
+  intrinsicHeight?: number;
+} | null => {
+  if (!element) {
+    return null;
+  }
+
+  const customData = element.customData as
+    | {
+        formulaType?: string;
+        formulaSource?: string;
+        formulaStyle?: Partial<MathFormulaStyle> | null;
+        intrinsicWidth?: number;
+        intrinsicHeight?: number;
+      }
+    | undefined;
+
+  if (
+    customData?.formulaType !== "math" ||
+    typeof customData.formulaSource !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    source: customData.formulaSource,
+    style: normalizeMathFormulaStyle(customData.formulaStyle),
+    intrinsicWidth:
+      typeof customData.intrinsicWidth === "number"
+        ? customData.intrinsicWidth
+        : undefined,
+    intrinsicHeight:
+      typeof customData.intrinsicHeight === "number"
+        ? customData.intrinsicHeight
+        : undefined,
+  };
+};
 
 const shareableLinkConfirmDialog = {
   title: t("overwriteConfirm.modal.shareableLink.title"),
@@ -373,8 +547,17 @@ const initializeScene = async (opts: {
 
 const ExcalidrawWrapper = () => {
   const excalidrawAPI = useExcalidrawAPI();
+  const [appMode, setAppMode] = useState<"editor" | "workspace">("editor");
+  const [primaryFile, setPrimaryFile] = useState<CloudFileRef | null>(null);
+  const [isSavingToCloud, setIsSavingToCloud] = useState(false);
+  const [canInstallPWA, setCanInstallPWA] = useState(() => !!pwaEvent);
+  const [showInstallPWA, setShowInstallPWA] = useState(() =>
+    shouldShowPWAInstallButton(),
+  );
 
   const [errorMessage, setErrorMessage] = useState("");
+  const [mathFormulaDialogState, setMathFormulaDialogState] =
+    useState<MathFormulaDialogState | null>(null);
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -395,6 +578,10 @@ const ExcalidrawWrapper = () => {
   }
 
   const debugCanvasRef = useRef<HTMLCanvasElement>(null);
+  const lastFormulaPointerRef = useRef<{
+    elementId: string;
+    timestamp: number;
+  } | null>(null);
 
   useEffect(() => {
     trackEvent("load", "frame", getFrame());
@@ -402,6 +589,20 @@ const ExcalidrawWrapper = () => {
     setTimeout(() => {
       trackEvent("load", "version", getVersion());
     }, VERSION_TIMEOUT);
+  }, []);
+
+  useEffect(() => {
+    const syncPWAInstallState = () => {
+      setCanInstallPWA(!!pwaEvent);
+      setShowInstallPWA(shouldShowPWAInstallButton());
+    };
+
+    pwaInstallStateListeners.add(syncPWAInstallState);
+    syncPWAInstallState();
+
+    return () => {
+      pwaInstallStateListeners.delete(syncPWAInstallState);
+    };
   }, []);
 
   const [, setShareDialogState] = useAtom(shareDialogStateAtom);
@@ -419,6 +620,230 @@ const ExcalidrawWrapper = () => {
   });
 
   const [, forceRefresh] = useState(false);
+
+  const handleInstallPWA = useCallback(async () => {
+    if (!pwaEvent) {
+      const isIOS = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+      const isSafari = /^((?!chrome|android).)*safari/i.test(
+        window.navigator.userAgent,
+      );
+      const needsDevPWAFlag =
+        import.meta.env.DEV && import.meta.env.VITE_APP_ENABLE_PWA !== "true";
+
+      setErrorMessage(
+        isIOS && isSafari
+          ? "iPhone/iPad 请在 Safari 里点击分享按钮，然后选择“添加到主屏幕”。"
+          : needsDevPWAFlag
+          ? "开发环境还没有启用 PWA。请在 .env.development 里设置 VITE_APP_ENABLE_PWA=true，然后重启 dev server。"
+          : "当前浏览器还没有触发安装提示。请优先使用 Chrome/Edge，并确认页面运行在 localhost 或 HTTPS 下；也可以从浏览器菜单中选择“安装应用”或“添加到桌面”。",
+      );
+      return;
+    }
+
+    const currentPWAEvent = pwaEvent;
+    await currentPWAEvent.prompt();
+    await currentPWAEvent.userChoice.catch(() => null);
+
+    if (pwaEvent === currentPWAEvent) {
+      pwaEvent = null;
+      notifyPWAInstallStateListeners();
+    }
+  }, []);
+
+  const handleInsertMathFormulaAtPointer = useCallback(
+    (sceneX: number, sceneY: number, activeTool: AppState["activeTool"]) => {
+      if (!excalidrawAPI) {
+        throw new Error("Excalidraw editor is not ready yet.");
+      }
+
+      setMathFormulaDialogState({
+        mode: "insert",
+        sceneX,
+        sceneY,
+        initialStyle: normalizeMathFormulaStyle(),
+        toolLocked: activeTool.locked,
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleEditMathFormula = useCallback(
+    (element: NonDeletedExcalidrawElement) => {
+      const mathFormulaData = getMathFormulaElementData(element);
+      if (!mathFormulaData) {
+        return;
+      }
+
+      setMathFormulaDialogState({
+        mode: "edit",
+        targetElementId: element.id,
+        initialValue: mathFormulaData.source,
+        initialStyle: mathFormulaData.style,
+      });
+      excalidrawAPI?.setActiveTool({ type: "selection" });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleCloseMathFormulaDialog = useCallback(() => {
+    const dialogState = mathFormulaDialogState;
+    setMathFormulaDialogState(null);
+
+    if (dialogState?.mode === "insert" && !dialogState.toolLocked) {
+      excalidrawAPI?.setActiveTool({ type: "selection" });
+    }
+  }, [excalidrawAPI, mathFormulaDialogState]);
+
+  const handleSubmitMathFormula = useCallback(
+    async (formula: string, style: MathFormulaStyle) => {
+      if (!excalidrawAPI) {
+        throw new Error("Excalidraw editor is not ready yet.");
+      }
+
+      const dialogState = mathFormulaDialogState;
+
+      if (!dialogState) {
+        return;
+      }
+
+      const normalizedFormula = formula.trim();
+
+      if (!normalizedFormula) {
+        throw new Error("Formula cannot be empty.");
+      }
+
+      const {
+        width,
+        height,
+        style: normalizedStyle,
+      } = measureMathFormulaDimensions(normalizedFormula, style);
+
+      const formulaCustomData = {
+        formulaSource: normalizedFormula,
+        formulaType: "math",
+        formulaStyle: normalizedStyle,
+        intrinsicWidth: width,
+        intrinsicHeight: height,
+      };
+
+      if (dialogState.mode === "edit" && dialogState.targetElementId) {
+        const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
+        const targetElement = elements.find(
+          (element) => element.id === dialogState.targetElementId,
+        );
+
+        if (!targetElement) {
+          throw new Error("Original formula element was not found.");
+        }
+
+        const centerX = targetElement.x + targetElement.width / 2;
+        const centerY = targetElement.y + targetElement.height / 2;
+
+        let updatedElement: NonDeletedExcalidrawElement;
+
+        if (isEmbeddableElement(targetElement)) {
+          updatedElement = newElementWith(targetElement, {
+            x: centerX - width / 2,
+            y: centerY - height / 2,
+            width,
+            height,
+            link: getMathFormulaEmbeddableLink(targetElement.id),
+            customData: formulaCustomData,
+          });
+        } else if (isInitializedImageElement(targetElement)) {
+          const { fileData } = await createMathFormulaAsset(
+            normalizedFormula,
+            normalizedStyle,
+          );
+
+          excalidrawAPI.addFiles([fileData]);
+
+          updatedElement = newElementWith(targetElement, {
+            x: centerX - width / 2,
+            y: centerY - height / 2,
+            width,
+            height,
+            fileId: fileData.id,
+            status: "saved",
+            customData: formulaCustomData,
+          });
+        } else {
+          throw new Error("Original formula element was not found.");
+        }
+
+        excalidrawAPI.updateScene({
+          elements: elements.map((element) =>
+            element.id === targetElement.id ? updatedElement : element,
+          ),
+          appState: {
+            selectedElementIds: {
+              [targetElement.id]: true,
+            },
+          },
+          captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+        });
+
+        setMathFormulaDialogState(null);
+        excalidrawAPI.setToast({
+          message: "Updated math formula",
+        });
+        return;
+      }
+
+      if (
+        typeof dialogState.sceneX !== "number" ||
+        typeof dialogState.sceneY !== "number"
+      ) {
+        throw new Error("Formula insertion position is missing.");
+      }
+
+      let embeddableElement = newEmbeddableElement({
+        type: "embeddable",
+        x: dialogState.sceneX - width / 2,
+        y: dialogState.sceneY - height / 2,
+        width,
+        height,
+        strokeColor: "transparent",
+        backgroundColor: "transparent",
+        fillStyle: "solid",
+        strokeWidth: 1,
+        strokeStyle: "solid",
+        roughness: 0,
+        opacity: 100,
+        roundness: null,
+        locked: false,
+      });
+
+      embeddableElement = newElementWith(embeddableElement, {
+        link: getMathFormulaEmbeddableLink(embeddableElement.id),
+        customData: formulaCustomData,
+      });
+
+      excalidrawAPI.updateScene({
+        elements: [
+          ...excalidrawAPI.getSceneElementsIncludingDeleted(),
+          embeddableElement,
+        ],
+        appState: {
+          selectedElementIds: {
+            [embeddableElement.id]: true,
+          },
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+
+      setMathFormulaDialogState(null);
+
+      if (!dialogState.toolLocked) {
+        excalidrawAPI.setActiveTool({ type: "selection" });
+      }
+
+      excalidrawAPI.setToast({
+        message: "Inserted math formula",
+      });
+    },
+    [excalidrawAPI, mathFormulaDialogState],
+  );
 
   useEffect(() => {
     if (isDevEnv()) {
@@ -843,6 +1268,555 @@ const ExcalidrawWrapper = () => {
   //   // console.log("onExport");
   // };
 
+  const handleOpenGoogleDriveFile = useCallback(
+    async (file: GoogleDriveFile) => {
+      if (!excalidrawAPI) {
+        throw new Error("Excalidraw editor is not ready yet.");
+      }
+
+      const downloadedFile = await downloadGoogleDriveFile(
+        file.id,
+        file.name,
+        file.mimeType,
+      );
+
+      const loadedScene = await loadFromBlob(
+        downloadedFile,
+        excalidrawAPI.getAppState(),
+        excalidrawAPI.getSceneElementsIncludingDeleted(),
+      );
+
+      excalidrawAPI.updateScene({
+        elements: loadedScene.elements,
+        appState: {
+          ...loadedScene.appState,
+          name:
+            loadedScene.appState.name ||
+            file.name.replace(/\.excalidraw$/i, ""),
+          openDialog: null,
+          openSidebar: null,
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+      excalidrawAPI.addFiles(Object.values(loadedScene.files));
+      excalidrawAPI.history.clear();
+
+      setPrimaryFile({
+        provider: "gdrive",
+        fileId: file.id,
+        folderId: file.parentId,
+        name: file.name,
+        mimeType: file.mimeType,
+        modifiedTime: file.modifiedTime,
+      });
+      setAppMode("editor");
+      excalidrawAPI.setToast({
+        message: `Loaded "${file.name}" from Google Drive`,
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleOpenLocalFile = useCallback(
+    async (file: LocalDirectoryFile) => {
+      if (!excalidrawAPI) {
+        throw new Error("Excalidraw editor is not ready yet.");
+      }
+
+      const localFile = await readLocalFile(file);
+      const loadedScene = await loadFromBlob(
+        localFile,
+        excalidrawAPI.getAppState(),
+        excalidrawAPI.getSceneElementsIncludingDeleted(),
+      );
+
+      excalidrawAPI.updateScene({
+        elements: loadedScene.elements,
+        appState: {
+          ...loadedScene.appState,
+          name:
+            loadedScene.appState.name ||
+            file.name.replace(/\.excalidraw$/i, ""),
+          openDialog: null,
+          openSidebar: null,
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+      excalidrawAPI.addFiles(Object.values(loadedScene.files));
+      excalidrawAPI.history.clear();
+
+      setPrimaryFile({
+        provider: "local",
+        fileId: file.id,
+        folderId: file.parentId,
+        name: file.name,
+        mimeType: file.mimeType,
+        modifiedTime: file.modifiedTime,
+        path: file.path,
+        fileHandle: file.fileHandle,
+        directoryHandle: file.directoryHandle,
+      });
+      setAppMode("editor");
+      excalidrawAPI.setToast({
+        message: `Loaded "${file.name}" from local directory`,
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleCreateGoogleDriveFile = useCallback(
+    async ({ folderId, name }: { folderId: string; name: string }) => {
+      const normalizedName = normalizeExcalidrawFileName(name);
+      const blob = buildExcalidrawBlob({
+        elements: [],
+        appState: {
+          viewBackgroundColor: getDefaultAppState().viewBackgroundColor,
+        },
+        files: {},
+      });
+
+      const savedFile = await createGoogleDriveFile({
+        folderId,
+        name: normalizedName,
+        blob,
+      });
+
+      const createdFile: GoogleDriveFile = {
+        id: savedFile.id,
+        name: savedFile.name,
+        mimeType: savedFile.mimeType,
+        parentId: savedFile.parents?.[0] || folderId,
+        modifiedTime: savedFile.modifiedTime,
+        isExcalidrawFile: true,
+      };
+
+      excalidrawAPI?.setToast({
+        message: `Created "${createdFile.name}" in Google Drive`,
+      });
+
+      return createdFile;
+    },
+    [excalidrawAPI],
+  );
+
+  const handleCreateLocalFile = useCallback(
+    async ({
+      folder,
+      name,
+    }: {
+      folder: LocalDirectoryFolder;
+      name: string;
+    }) => {
+      const normalizedName = normalizeExcalidrawFileName(name);
+      const blob = buildExcalidrawBlob({
+        elements: [],
+        appState: {
+          viewBackgroundColor: getDefaultAppState().viewBackgroundColor,
+        },
+        files: {},
+      });
+
+      const createdFile = await createLocalFile({
+        parentFolder: folder,
+        name: normalizedName,
+        blob,
+      });
+
+      excalidrawAPI?.setToast({
+        message: `Created "${createdFile.name}" in local directory`,
+      });
+
+      return createdFile;
+    },
+    [excalidrawAPI],
+  );
+
+  const saveToGoogleDriveAs = useCallback(async () => {
+    if (!excalidrawAPI) {
+      throw new Error("Excalidraw editor is not ready yet.");
+    }
+
+    const targetFolder = await pickGoogleDriveRootFolder();
+
+    if (!targetFolder) {
+      return null;
+    }
+
+    const suggestedName = normalizeExcalidrawFileName(
+      excalidrawAPI.getName() || primaryFile?.name || "Untitled",
+    );
+    const inputName = window.prompt(
+      "请输入保存到 Google Drive 的文件名",
+      suggestedName,
+    );
+
+    if (!inputName) {
+      return null;
+    }
+
+    const normalizedName = normalizeExcalidrawFileName(inputName);
+    const blob = buildExcalidrawBlob({
+      elements: excalidrawAPI.getSceneElements(),
+      appState: excalidrawAPI.getAppState(),
+      files: excalidrawAPI.getFiles(),
+    });
+
+    const savedFile = await createGoogleDriveFile({
+      folderId: targetFolder.id,
+      name: normalizedName,
+      blob,
+    });
+
+    const nextPrimaryFile: CloudFileRef = {
+      provider: "gdrive",
+      fileId: savedFile.id,
+      folderId: savedFile.parents?.[0] || targetFolder.id,
+      name: savedFile.name,
+      mimeType: savedFile.mimeType,
+      modifiedTime: savedFile.modifiedTime,
+    };
+
+    setPrimaryFile(nextPrimaryFile);
+    excalidrawAPI.updateScene({
+      appState: {
+        name: savedFile.name.replace(/\.excalidraw$/i, ""),
+      },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+    excalidrawAPI.setToast({
+      message: `Saved "${savedFile.name}" to Google Drive`,
+    });
+
+    return nextPrimaryFile;
+  }, [excalidrawAPI, primaryFile]);
+
+  const saveToLocalAs = useCallback(async () => {
+    if (!excalidrawAPI) {
+      throw new Error("Excalidraw editor is not ready yet.");
+    }
+
+    const targetFolder =
+      getStoredLocalRootFolder() ?? (await pickLocalRootFolder());
+
+    if (!targetFolder) {
+      return null;
+    }
+
+    const suggestedName = normalizeExcalidrawFileName(
+      excalidrawAPI.getName() || primaryFile?.name || "Untitled",
+    );
+    const inputName = window.prompt(
+      "Enter the file name to save into the local directory",
+      suggestedName,
+    );
+
+    if (!inputName) {
+      return null;
+    }
+
+    const normalizedName = normalizeExcalidrawFileName(inputName);
+    const blob = buildExcalidrawBlob({
+      elements: excalidrawAPI.getSceneElements(),
+      appState: excalidrawAPI.getAppState(),
+      files: excalidrawAPI.getFiles(),
+    });
+
+    const savedFile = await createLocalFile({
+      parentFolder: targetFolder,
+      name: normalizedName,
+      blob,
+    });
+
+    const nextPrimaryFile: CloudFileRef = {
+      provider: "local",
+      fileId: savedFile.id,
+      folderId: savedFile.parentId,
+      name: savedFile.name,
+      mimeType: savedFile.mimeType,
+      modifiedTime: savedFile.modifiedTime,
+      path: savedFile.path,
+      fileHandle: savedFile.fileHandle,
+      directoryHandle: savedFile.directoryHandle,
+    };
+
+    setPrimaryFile(nextPrimaryFile);
+    excalidrawAPI.updateScene({
+      appState: {
+        name: savedFile.name.replace(/\.excalidraw$/i, ""),
+      },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+    excalidrawAPI.setToast({
+      message: `Saved "${savedFile.name}" to local directory`,
+    });
+
+    return nextPrimaryFile;
+  }, [excalidrawAPI, primaryFile]);
+
+  const handleSaveToCloud = useCallback(async () => {
+    if (!excalidrawAPI || isSavingToCloud) {
+      return;
+    }
+
+    setIsSavingToCloud(true);
+    try {
+      if (primaryFile?.provider === "gdrive") {
+        const normalizedName = normalizeExcalidrawFileName(primaryFile.name);
+        const blob = buildExcalidrawBlob({
+          elements: excalidrawAPI.getSceneElements(),
+          appState: excalidrawAPI.getAppState(),
+          files: excalidrawAPI.getFiles(),
+        });
+
+        const savedFile = await updateGoogleDriveFile({
+          fileId: primaryFile.fileId,
+          name: normalizedName,
+          blob,
+        });
+
+        const nextPrimaryFile: CloudFileRef = {
+          ...primaryFile,
+          name: savedFile.name,
+          mimeType: savedFile.mimeType,
+          folderId: savedFile.parents?.[0] || primaryFile.folderId,
+          modifiedTime: savedFile.modifiedTime,
+        };
+
+        setPrimaryFile(nextPrimaryFile);
+        excalidrawAPI.updateScene({
+          appState: {
+            name: savedFile.name.replace(/\.excalidraw$/i, ""),
+          },
+          captureUpdate: CaptureUpdateAction.NEVER,
+        });
+        excalidrawAPI.setToast({
+          message: `Saved "${savedFile.name}" to Google Drive`,
+        });
+        return;
+      }
+
+      if (
+        primaryFile?.provider === "local" &&
+        primaryFile.fileHandle &&
+        primaryFile.directoryHandle
+      ) {
+        const blob = buildExcalidrawBlob({
+          elements: excalidrawAPI.getSceneElements(),
+          appState: excalidrawAPI.getAppState(),
+          files: excalidrawAPI.getFiles(),
+        });
+
+        const savedFile = await updateLocalFile({
+          file: {
+            id: primaryFile.fileId,
+            name: primaryFile.name,
+            parentId: primaryFile.folderId,
+            path: primaryFile.path || primaryFile.fileId,
+            mimeType: primaryFile.mimeType,
+            modifiedTime: primaryFile.modifiedTime,
+            isExcalidrawFile: true,
+            fileHandle: primaryFile.fileHandle,
+            directoryHandle: primaryFile.directoryHandle,
+            parentDirectoryHandle: primaryFile.directoryHandle,
+          },
+          blob,
+        });
+
+        const nextPrimaryFile: CloudFileRef = {
+          ...primaryFile,
+          name: savedFile.name,
+          mimeType: savedFile.mimeType,
+          folderId: savedFile.parentId,
+          modifiedTime: savedFile.modifiedTime,
+          path: savedFile.path,
+          fileHandle: savedFile.fileHandle,
+          directoryHandle: savedFile.directoryHandle,
+        };
+
+        setPrimaryFile(nextPrimaryFile);
+        excalidrawAPI.updateScene({
+          appState: {
+            name: savedFile.name.replace(/\.excalidraw$/i, ""),
+          },
+          captureUpdate: CaptureUpdateAction.NEVER,
+        });
+        excalidrawAPI.setToast({
+          message: `Saved "${savedFile.name}" to local directory`,
+        });
+        return;
+      }
+
+      const saveLocalFirst = window.confirm(
+        "Save to a local directory?\nPress Cancel to save to Google Drive instead.",
+      );
+      if (saveLocalFirst) {
+        await saveToLocalAs();
+        return;
+      }
+
+      await saveToGoogleDriveAs();
+    } finally {
+      setIsSavingToCloud(false);
+    }
+  }, [
+    excalidrawAPI,
+    isSavingToCloud,
+    primaryFile,
+    saveToGoogleDriveAs,
+    saveToLocalAs,
+  ]);
+
+  const handleSaveAsToCloud = useCallback(async () => {
+    if (isSavingToCloud) {
+      return;
+    }
+
+    setIsSavingToCloud(true);
+    try {
+      if (primaryFile?.provider === "local") {
+        await saveToLocalAs();
+        return;
+      }
+
+      if (primaryFile?.provider === "gdrive") {
+        await saveToGoogleDriveAs();
+        return;
+      }
+
+      const saveLocalFirst = window.confirm(
+        "Save to a local directory?\nPress Cancel to save to Google Drive instead.",
+      );
+      if (saveLocalFirst) {
+        await saveToLocalAs();
+        return;
+      }
+
+      await saveToGoogleDriveAs();
+    } finally {
+      setIsSavingToCloud(false);
+    }
+  }, [isSavingToCloud, primaryFile, saveToGoogleDriveAs, saveToLocalAs]);
+
+  const handleCurrentGoogleDriveFileRenamed = useCallback(
+    (file: GoogleDriveFile) => {
+      setPrimaryFile((prev) => {
+        if (prev?.provider !== "gdrive" || prev.fileId !== file.id) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          name: file.name,
+          folderId: file.parentId,
+          mimeType: file.mimeType,
+          modifiedTime: file.modifiedTime,
+        };
+      });
+
+      excalidrawAPI?.updateScene({
+        appState: {
+          name: file.name.replace(/\.excalidraw$/i, ""),
+        },
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+      excalidrawAPI?.setToast({
+        message: `Renamed current file to "${file.name}"`,
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleCurrentGoogleDriveFileDeleted = useCallback(
+    (fileId: string) => {
+      setPrimaryFile((prev) => {
+        if (prev?.provider !== "gdrive" || prev.fileId !== fileId) {
+          return prev;
+        }
+        return null;
+      });
+
+      excalidrawAPI?.setToast({
+        message: "Current Google Drive file was deleted",
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleCurrentLocalFileDeleted = useCallback(
+    (fileId: string) => {
+      setPrimaryFile((prev) => {
+        if (prev?.provider !== "local" || prev.fileId !== fileId) {
+          return prev;
+        }
+        return null;
+      });
+
+      excalidrawAPI?.setToast({
+        message: "Current local file was deleted",
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleCurrentLocalFileRenamed = useCallback(
+    (file: LocalDirectoryFile) => {
+      setPrimaryFile((prev) => {
+        if (prev?.provider !== "local" || prev.fileId !== file.id) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          fileId: file.id,
+          folderId: file.parentId,
+          name: file.name,
+          mimeType: file.mimeType,
+          modifiedTime: file.modifiedTime,
+          path: file.path,
+          fileHandle: file.fileHandle,
+          directoryHandle: file.directoryHandle,
+        };
+      });
+
+      excalidrawAPI?.updateScene({
+        appState: {
+          name: file.name.replace(/\.excalidraw$/i, ""),
+        },
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const validateEmbeddable = useCallback((link: string) => {
+    if (link.startsWith("math://formula/")) {
+      return true;
+    }
+
+    return undefined;
+  }, []);
+
+  const renderEmbeddable = useCallback(
+    (element: NonDeleted<ExcalidrawEmbeddableElement>) => {
+      const mathFormulaData = getMathFormulaElementData(element);
+
+      if (!mathFormulaData) {
+        return null;
+      }
+
+      return (
+        <MathFormulaEmbeddable
+          element={element}
+          formula={mathFormulaData.source}
+          style={mathFormulaData.style}
+          intrinsicWidth={mathFormulaData.intrinsicWidth}
+          intrinsicHeight={mathFormulaData.intrinsicHeight}
+        />
+      );
+    },
+    [],
+  );
+
   // browsers generally prevent infinite self-embedding, there are
   // cases where it still happens, and while we disallow self-embedding
   // by not whitelisting our own origin, this serves as an additional guard
@@ -903,13 +1877,67 @@ const ExcalidrawWrapper = () => {
 
   return (
     <div
-      style={{ height: "100%" }}
+      style={{ height: "100%", position: "relative" }}
       className={clsx("excalidraw-app", {
         "is-collaborating": isCollaborating,
       })}
     >
       <Excalidraw
         onChange={onChange}
+        onPointerDown={(activeTool, pointerDownState) => {
+          const hitElement = pointerDownState.hit.element;
+
+          if (
+            activeTool.type === "custom" &&
+            activeTool.customType === "math-formula" &&
+            !mathFormulaDialogState
+          ) {
+            try {
+              handleInsertMathFormulaAtPointer(
+                pointerDownState.origin.x,
+                pointerDownState.origin.y,
+                activeTool,
+              );
+            } catch (error) {
+              setErrorMessage(
+                error instanceof Error ? error.message : String(error),
+              );
+              if (!activeTool.locked) {
+                excalidrawAPI?.setActiveTool({ type: "selection" });
+              }
+            }
+            return;
+          }
+
+          if (activeTool.type !== "selection" || mathFormulaDialogState) {
+            lastFormulaPointerRef.current = null;
+            return;
+          }
+
+          const mathFormulaData = getMathFormulaElementData(hitElement);
+          if (!mathFormulaData || !hitElement) {
+            lastFormulaPointerRef.current = null;
+            return;
+          }
+
+          const now = Date.now();
+          const lastPointer = lastFormulaPointerRef.current;
+
+          if (
+            lastPointer &&
+            lastPointer.elementId === hitElement.id &&
+            now - lastPointer.timestamp <= MATH_FORMULA_DOUBLE_CLICK_MS
+          ) {
+            lastFormulaPointerRef.current = null;
+            handleEditMathFormula(hitElement);
+            return;
+          }
+
+          lastFormulaPointerRef.current = {
+            elementId: hitElement.id,
+            timestamp: now,
+          };
+        }}
         onExport={onExport}
         initialData={initialStatePromiseRef.current.promise}
         isCollaborating={isCollaborating}
@@ -948,17 +1976,43 @@ const ExcalidrawWrapper = () => {
         }}
         langCode={langCode}
         renderCustomStats={renderCustomStats}
+        validateEmbeddable={validateEmbeddable}
+        renderEmbeddable={renderEmbeddable}
         detectScroll={false}
         handleKeyboardGlobally={true}
         autoFocus={true}
         theme={editorTheme}
         renderTopRightUI={(isMobile) => {
-          if (isMobile || !collabAPI || isCollabDisabled) {
+          if (isMobile) {
             return null;
           }
 
           return (
             <div className="excalidraw-ui-top-right">
+              <button
+                type="button"
+                className="cloud-save-button"
+                onClick={() => {
+                  handleSaveToCloud().catch((error: Error) => {
+                    setErrorMessage(error.message);
+                  });
+                }}
+                disabled={isSavingToCloud}
+              >
+                {isSavingToCloud ? "Saving..." : "Save"}
+              </button>
+              <button
+                type="button"
+                className="cloud-save-button cloud-save-button--secondary"
+                onClick={() => {
+                  handleSaveAsToCloud().catch((error: Error) => {
+                    setErrorMessage(error.message);
+                  });
+                }}
+                disabled={isSavingToCloud}
+              >
+                Save as
+              </button>
               {excalidrawAPI?.getEditorInterface().formFactor === "desktop" && (
                 <ExcalidrawPlusPromoBanner
                   isSignedIn={isExcalidrawPlusSignedUser}
@@ -966,13 +2020,15 @@ const ExcalidrawWrapper = () => {
               )}
 
               {collabError.message && <CollabError collabError={collabError} />}
-              <LiveCollaborationTrigger
-                isCollaborating={isCollaborating}
-                onSelect={() =>
-                  setShareDialogState({ isOpen: true, type: "share" })
-                }
-                editorInterface={editorInterface}
-              />
+              {collabAPI && !isCollabDisabled && (
+                <LiveCollaborationTrigger
+                  isCollaborating={isCollaborating}
+                  onSelect={() =>
+                    setShareDialogState({ isOpen: true, type: "share" })
+                  }
+                  editorInterface={editorInterface}
+                />
+              )}
             </div>
           );
         }}
@@ -990,6 +2046,9 @@ const ExcalidrawWrapper = () => {
           theme={appTheme}
           setTheme={(theme) => setAppTheme(theme)}
           refresh={() => forceRefresh((prev) => !prev)}
+        />
+        <WorkspaceEntryTrigger
+          onOpenWorkspace={() => setAppMode("workspace")}
         />
         <AppWelcomeScreen
           onCollabDialogOpen={onCollabDialogOpen}
@@ -1057,7 +2116,23 @@ const ExcalidrawWrapper = () => {
           }}
         />
 
-        <AppSidebar />
+        <AppSidebar
+          onOpenWorkspace={() => setAppMode("workspace")}
+          onInstallPWA={() => {
+            void handleInstallPWA();
+          }}
+          showInstallPWA={showInstallPWA}
+        />
+
+        {mathFormulaDialogState && (
+          <MathFormulaDialog
+            initialValue={mathFormulaDialogState.initialValue}
+            initialStyle={mathFormulaDialogState.initialStyle}
+            mode={mathFormulaDialogState.mode}
+            onClose={handleCloseMathFormulaDialog}
+            onSubmit={handleSubmitMathFormula}
+          />
+        )}
 
         {errorMessage && (
           <ErrorDialog onClose={() => setErrorMessage("")}>
@@ -1067,6 +2142,22 @@ const ExcalidrawWrapper = () => {
 
         <CommandPalette
           customCommandPaletteItems={[
+            {
+              label: "Workspace",
+              category: DEFAULT_CATEGORIES.app,
+              predicate: true,
+              keywords: [
+                "workspace",
+                "drive",
+                "google",
+                "cloud",
+                "folder",
+                "project",
+              ],
+              perform: () => {
+                setAppMode("workspace");
+              },
+            },
             {
               label: t("labels.liveCollaboration"),
               category: DEFAULT_CATEGORIES.app,
@@ -1240,16 +2331,9 @@ const ExcalidrawWrapper = () => {
             {
               label: t("labels.installPWA"),
               category: DEFAULT_CATEGORIES.app,
-              predicate: () => !!pwaEvent,
+              predicate: () => canInstallPWA,
               perform: () => {
-                if (pwaEvent) {
-                  pwaEvent.prompt();
-                  pwaEvent.userChoice.then(() => {
-                    // event cannot be reused, but we'll hopefully
-                    // grab new one as the event should be fired again
-                    pwaEvent = null;
-                  });
-                }
+                void handleInstallPWA();
               },
             },
           ]}
@@ -1262,6 +2346,27 @@ const ExcalidrawWrapper = () => {
           />
         )}
       </Excalidraw>
+      {appMode === "workspace" && (
+        <WorkspacePage
+          onBackToEditor={() => setAppMode("editor")}
+          onOpenGoogleDriveFile={handleOpenGoogleDriveFile}
+          onCreateGoogleDriveFile={handleCreateGoogleDriveFile}
+          onCurrentGoogleDriveFileRenamed={handleCurrentGoogleDriveFileRenamed}
+          onCurrentGoogleDriveFileDeleted={handleCurrentGoogleDriveFileDeleted}
+          onOpenLocalFile={handleOpenLocalFile}
+          onCreateLocalFile={handleCreateLocalFile}
+          onCurrentLocalFileRenamed={handleCurrentLocalFileRenamed}
+          onCurrentLocalFileDeleted={handleCurrentLocalFileDeleted}
+          currentFileProvider={
+            primaryFile?.provider === "gdrive" ||
+            primaryFile?.provider === "local"
+              ? primaryFile.provider
+              : null
+          }
+          currentFileId={primaryFile?.fileId ?? null}
+          theme={editorTheme}
+        />
+      )}
     </div>
   );
 };

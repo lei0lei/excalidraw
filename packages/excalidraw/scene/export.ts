@@ -58,6 +58,8 @@ import { Fonts } from "../fonts";
 import { renderStaticScene } from "../renderer/staticScene";
 import { renderSceneToSvg } from "../renderer/staticSvgScene";
 
+import { replaceMathFormulaEmbeddablesForExport } from "./mathFormula";
+
 import type { RenderableElementsMap } from "./types";
 
 import type { AppState, BinaryFiles } from "../types";
@@ -200,6 +202,13 @@ export const exportToCanvas = async (
   // load font faces before continuing, by default leverages browsers' [FontFace API](https://developer.mozilla.org/en-US/docs/Web/API/FontFace)
   await loadFonts();
 
+  const exportData = await replaceMathFormulaEmbeddablesForExport(
+    elements,
+    files,
+  );
+  elements = exportData.elements;
+  files = exportData.files;
+
   const frameRendering = getFrameRenderingConfig(
     exportingFrame ?? null,
     appState.frameRendering ?? null,
@@ -304,6 +313,13 @@ export const exportToSvg = async (
     reuseImages?: boolean;
   },
 ): Promise<SVGSVGElement> => {
+  const exportData = await replaceMathFormulaEmbeddablesForExport(
+    elements,
+    files,
+  );
+  const renderElements = exportData.elements;
+  const renderFiles = exportData.files;
+
   const frameRendering = getFrameRenderingConfig(
     opts?.exportingFrame ?? null,
     appState.frameRendering ?? null,
@@ -320,7 +336,7 @@ export const exportToSvg = async (
   const { exportingFrame = null } = opts || {};
 
   const elementsForRender = prepareElementsForRender({
-    elements,
+    elements: renderElements,
     exportingFrame,
     exportWithDarkMode,
     frameRendering,
@@ -386,10 +402,10 @@ export const exportToSvg = async (
   // frame clip paths
   // ---------------------------------------------------------------------------
 
-  const frameElements = getFrameLikeElements(elements);
+  const frameElements = getFrameLikeElements(renderElements);
 
   if (frameElements.length) {
-    const elementsMap = arrayToMap(elements);
+    const elementsMap = arrayToMap(renderElements);
 
     for (const frame of frameElements) {
       const clipPath = svgRoot.ownerDocument.createElementNS(
@@ -475,7 +491,7 @@ export const exportToSvg = async (
     toBrandedType<RenderableElementsMap>(arrayToMap(elementsForRender)),
     rsvg,
     svgRoot,
-    files || {},
+    renderFiles,
     {
       offsetX,
       offsetY,

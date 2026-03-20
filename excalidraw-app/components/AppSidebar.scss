@@ -33,4 +33,14 @@
   .link-button {
     margin: 0 auto;
   }
+
+  .app-sidebar-install-trigger,
+  .app-sidebar-workspace-trigger {
+    opacity: 0.7;
+
+    &:hover,
+    &:focus-visible {
+      opacity: 1;
+    }
+  }
 }

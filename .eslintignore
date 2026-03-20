@@ -1,11 +1,16 @@
 node_modules/
 build/
+**/build/
 package-lock.json
 .vscode/
 firebase/
 dist/
+**/dist/
 public/workbox
 packages/excalidraw/types
 examples/**/public
 dev-dist
+**/dev-dist/
+.vite/
+**/.vite/
 coverage

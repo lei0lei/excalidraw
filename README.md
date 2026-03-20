@@ -36,6 +36,19 @@
     <img alt="Follow Excalidraw on Twitter" src="https://img.shields.io/twitter/follow/excalidraw.svg?label=follow+@excalidraw&style=social&logo=twitter"/></a>
 </p>
 
+<p align="center">
+  <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Flei0lei%2Fexcalidraw&project-name=excalidraw-workspace&repository-name=excalidraw-workspace&install-command=yarn%20install&build-command=yarn%20build&output-directory=excalidraw-app%2Fbuild">
+    <img src="https://vercel.com/button" alt="Deploy with Vercel" />
+  </a>
+  <a href="https://app.netlify.com/start/deploy?repository=https://github.com/lei0lei/excalidraw">
+    <img src="https://www.netlify.com/img/deploy/button.svg" alt="Deploy to Netlify" />
+  </a>
+</p>
+
+<p align="center">
+  See <a href="./DEPLOY.md">DEPLOY.md</a> for production environment variables and Google Drive setup.
+</p>
+
 <div align="center">
   <figure>
     <a href="https://excalidraw.com" target="_blank" rel="noopener">

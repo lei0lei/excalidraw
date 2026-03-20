@@ -11,6 +11,13 @@ import { woff2BrowserPlugin } from "../scripts/woff2/woff2-vite-plugins";
 export default defineConfig(({ mode }) => {
   // To load .env variables
   const envVars = loadEnv(mode, `../`);
+  const pwaShortName = envVars.VITE_APP_PWA_SHORT_NAME || "Excalidraw";
+  const pwaName = envVars.VITE_APP_PWA_NAME || "Excalidraw";
+  const pwaDescription =
+    envVars.VITE_APP_PWA_DESCRIPTION ||
+    "Excalidraw is a whiteboard tool that lets you easily sketch diagrams that have a hand-drawn feel to them.";
+  const pwaThemeColor = envVars.VITE_APP_PWA_THEME_COLOR || "#121212";
+  const pwaBackgroundColor = envVars.VITE_APP_PWA_BACKGROUND_COLOR || "#ffffff";
   // https://vitejs.dev/config/
   return {
     server: {
@@ -212,10 +219,9 @@ export default defineConfig(({ mode }) => {
           maximumFileSizeToCacheInBytes: 2.3 * 1024 ** 2, // 2.3MB
         },
         manifest: {
-          short_name: "Excalidraw",
-          name: "Excalidraw",
-          description:
-            "Excalidraw is a whiteboard tool that lets you easily sketch diagrams that have a hand-drawn feel to them.",
+          short_name: pwaShortName,
+          name: pwaName,
+          description: pwaDescription,
           icons: [
             {
               src: "android-chrome-192x192.png",
@@ -237,12 +243,24 @@ export default defineConfig(({ mode }) => {
               sizes: "16x16",
               type: "image/png",
             },
+            {
+              src: "maskable_icon_x192.png",
+              sizes: "192x192",
+              type: "image/png",
+              purpose: "maskable",
+            },
+            {
+              src: "maskable_icon_x512.png",
+              sizes: "512x512",
+              type: "image/png",
+              purpose: "maskable",
+            },
           ],
           start_url: "/",
           id: "excalidraw",
           display: "standalone",
-          theme_color: "#121212",
-          background_color: "#ffffff",
+          theme_color: pwaThemeColor,
+          background_color: pwaBackgroundColor,
           file_handlers: [
             {
               action: "/",

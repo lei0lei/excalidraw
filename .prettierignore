@@ -1,0 +1,8 @@
+build/
+**/build/
+dist/
+**/dist/
+dev-dist/
+**/dev-dist/
+.vite/
+**/.vite/

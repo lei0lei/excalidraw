@@ -31,10 +31,19 @@ interface ImportMetaEnv {
 
   // Enable PWA in dev server
   VITE_APP_ENABLE_PWA: string;
+  VITE_APP_PWA_SHORT_NAME: string;
+  VITE_APP_PWA_NAME: string;
+  VITE_APP_PWA_DESCRIPTION: string;
+  VITE_APP_PWA_THEME_COLOR: string;
+  VITE_APP_PWA_BACKGROUND_COLOR: string;
 
   VITE_APP_PLUS_LP: string;
 
   VITE_APP_PLUS_APP: string;
+
+  VITE_APP_GOOGLE_CLIENT_ID: string;
+  VITE_APP_GOOGLE_API_KEY: string;
+  VITE_APP_GOOGLE_APP_ID: string;
 
   VITE_APP_GIT_SHA: string;
 

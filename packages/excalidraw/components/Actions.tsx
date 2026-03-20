@@ -101,6 +101,18 @@ const PROPERTIES_CLASSES = clsx([
   "properties-content",
 ]);
 
+const mathFormulaToolIcon = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M5 7l4 5-4 5M12 7h7M12 12h7M12 17h7"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export const canChangeStrokeColor = (
   appState: UIAppState,
   targetElements: ExcalidrawElement[],
@@ -1075,6 +1087,8 @@ export const ShapesSwitcher = ({
     app.state.preferredSelectionTool.type !== "lasso";
 
   const embeddableToolSelected = activeTool.type === "embeddable";
+  const mathFormulaToolSelected =
+    activeTool.type === "custom" && activeTool.customType === "math-formula";
 
   const { TTDDialogTriggerTunnel } = useTunnels();
 
@@ -1188,6 +1202,7 @@ export const ShapesSwitcher = ({
             "App-toolbar__extra-tools-trigger--selected":
               frameToolSelected ||
               embeddableToolSelected ||
+              mathFormulaToolSelected ||
               lassoToolSelected ||
               // in collab we're already highlighting the laser button
               // outside toolbar, so let's not highlight extra-tools button
@@ -1204,6 +1219,8 @@ export const ShapesSwitcher = ({
             ? frameToolIcon
             : embeddableToolSelected
             ? EmbedIcon
+            : mathFormulaToolSelected
+            ? mathFormulaToolIcon
             : laserToolSelected && !app.props.isCollaborating
             ? laserPointerToolIcon
             : lassoToolSelected
@@ -1231,6 +1248,16 @@ export const ShapesSwitcher = ({
             selected={embeddableToolSelected}
           >
             {t("toolBar.embeddable")}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() =>
+              app.setActiveTool({ type: "custom", customType: "math-formula" })
+            }
+            icon={mathFormulaToolIcon}
+            data-testid="toolbar-math-formula"
+            selected={mathFormulaToolSelected}
+          >
+            Math formula
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}

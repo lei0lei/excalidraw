@@ -1,5 +1,6 @@
 {
   "extends": ["@excalidraw/eslint-config", "react-app"],
+  "ignorePatterns": ["build/**", "**/build/**", "dist/**", "**/dist/**", "dev-dist/**", "**/dev-dist/**", ".vite/**", "**/.vite/**"],
   "rules": {
     "import/order": [
       "warn",

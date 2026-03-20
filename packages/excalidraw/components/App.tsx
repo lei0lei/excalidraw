@@ -1690,6 +1690,17 @@ class App extends React.Component<AppProps, AppState> {
           const isHovered =
             this.state.activeEmbeddable?.element === el &&
             this.state.activeEmbeddable?.state === "hover";
+          const customData = el.customData as
+            | {
+                formulaType?: string;
+              }
+            | undefined;
+          const shouldShowInteractionHint =
+            isHovered &&
+            !(
+              el.link?.startsWith("math://formula/") ||
+              customData?.formulaType === "math"
+            );
 
           return (
             <div
@@ -1746,7 +1757,7 @@ class App extends React.Component<AppProps, AppState> {
                     : POINTER_EVENTS.disabled,
                 }}
               >
-                {isHovered && (
+                {shouldShowInteractionHint && (
                   <div className="excalidraw__embeddable-hint">
                     {t("buttons.embeddableInteractionButton")}
                   </div>
