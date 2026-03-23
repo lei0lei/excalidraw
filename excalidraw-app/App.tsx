@@ -1784,6 +1784,80 @@ const ExcalidrawWrapper = () => {
     return undefined;
   }, []);
 
+  const handleAutoResizeMathFormula = useCallback(
+    (elementId: string, size: { width: number; height: number }) => {
+      if (!excalidrawAPI) {
+        return;
+      }
+
+      const elements = excalidrawAPI.getSceneElementsIncludingDeleted();
+      const targetElement = elements.find(
+        (element) => element.id === elementId,
+      );
+
+      if (!targetElement || !isEmbeddableElement(targetElement)) {
+        return;
+      }
+
+      const currentCustomData = (targetElement.customData || {}) as Record<
+        string,
+        unknown
+      >;
+      const prevIntrinsicWidth =
+        typeof currentCustomData.intrinsicWidth === "number"
+          ? Math.max(currentCustomData.intrinsicWidth, 1)
+          : Math.max(targetElement.width, 1);
+      const prevIntrinsicHeight =
+        typeof currentCustomData.intrinsicHeight === "number"
+          ? Math.max(currentCustomData.intrinsicHeight, 1)
+          : Math.max(targetElement.height, 1);
+      const widthScale = targetElement.width / prevIntrinsicWidth;
+      const heightScale = targetElement.height / prevIntrinsicHeight;
+      const nextIntrinsicWidth = Math.max(size.width, 1);
+      const nextIntrinsicHeight = Math.max(size.height, 1);
+      const nextWidth = Math.max(
+        1,
+        Math.round(
+          nextIntrinsicWidth * (Number.isFinite(widthScale) ? widthScale : 1),
+        ),
+      );
+      const nextHeight = Math.max(
+        1,
+        Math.round(
+          nextIntrinsicHeight *
+            (Number.isFinite(heightScale) ? heightScale : 1),
+        ),
+      );
+
+      if (
+        Math.abs(nextIntrinsicWidth - prevIntrinsicWidth) < 2 &&
+        Math.abs(nextIntrinsicHeight - prevIntrinsicHeight) < 2
+      ) {
+        return;
+      }
+
+      const nextElement = newElementWith(targetElement, {
+        x: targetElement.x + targetElement.width / 2 - nextWidth / 2,
+        y: targetElement.y + targetElement.height / 2 - nextHeight / 2,
+        width: nextWidth,
+        height: nextHeight,
+        customData: {
+          ...currentCustomData,
+          intrinsicWidth: nextIntrinsicWidth,
+          intrinsicHeight: nextIntrinsicHeight,
+        },
+      });
+
+      excalidrawAPI.updateScene({
+        elements: elements.map((element) =>
+          element.id === elementId ? nextElement : element,
+        ),
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+    },
+    [excalidrawAPI],
+  );
+
   const renderEmbeddable = useCallback(
     (element: NonDeleted<ExcalidrawEmbeddableElement>) => {
       const mathFormulaData = getMathFormulaElementData(element);
@@ -1799,10 +1873,11 @@ const ExcalidrawWrapper = () => {
           style={mathFormulaData.style}
           intrinsicWidth={mathFormulaData.intrinsicWidth}
           intrinsicHeight={mathFormulaData.intrinsicHeight}
+          onAutoResize={(size) => handleAutoResizeMathFormula(element.id, size)}
         />
       );
     },
-    [],
+    [handleAutoResizeMathFormula],
   );
 
   // browsers generally prevent infinite self-embedding, there are

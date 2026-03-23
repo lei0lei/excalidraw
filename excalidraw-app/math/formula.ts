@@ -9,11 +9,13 @@ import {
 import type { BinaryFileData } from "@excalidraw/excalidraw/types";
 
 const DEFAULT_FORMULA_FONT_SIZE = 28;
-const FORMULA_PADDING_X = 16;
-const FORMULA_PADDING_Y = 12;
+const FORMULA_PADDING_X = 10;
+const FORMULA_PADDING_Y = 6;
 const FORMULA_MAX_WIDTH = 720;
 const DEFAULT_FORMULA_COLOR = "#1d1d3a";
-const FORMULA_MEASUREMENT_SLACK = 6;
+const FORMULA_CACHE_LIMIT = 200;
+const getFormulaMeasurementSlack = (style: MathFormulaStyle) =>
+  Math.max(6, Math.ceil(style.fontSize * 0.18));
 
 export const DEFAULT_MATH_FORMULA = "\\frac{a}{b}=c";
 
@@ -49,19 +51,82 @@ export const normalizeMathFormulaStyle = (
   renderStyle: DEFAULT_MATH_FORMULA_STYLE.renderStyle,
 });
 
+const touchCacheEntry = <T>(cache: Map<string, T>, key: string, value: T) => {
+  if (cache.has(key)) {
+    cache.delete(key);
+  }
+  cache.set(key, value);
+
+  if (cache.size > FORMULA_CACHE_LIMIT) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey) {
+      cache.delete(oldestKey);
+    }
+  }
+};
+
+const getCachedEntry = <T>(cache: Map<string, T>, key: string) => {
+  const cached = cache.get(key);
+  if (!cached) {
+    return null;
+  }
+
+  touchCacheEntry(cache, key, cached);
+  return cached;
+};
+
+const getMathFormulaCacheKey = (
+  formula: string,
+  style: MathFormulaStyle,
+  variant: string,
+) =>
+  [
+    variant,
+    formula,
+    style.fontSize,
+    style.color,
+    style.displayMode ? "1" : "0",
+    style.renderStyle,
+  ].join("::");
+
+const formulaMarkupCache = new Map<string, string>();
+const formulaMeasureCache = new Map<
+  string,
+  {
+    width: number;
+    height: number;
+    markup: string;
+    style: MathFormulaStyle;
+  }
+>();
+
 const renderMathFormula = (
   formula: string,
   style?: Partial<MathFormulaStyle> | null,
   output: "htmlAndMathml" | "mathml" = "htmlAndMathml",
 ) => {
   const normalizedStyle = normalizeMathFormulaStyle(style);
+  const cacheKey = getMathFormulaCacheKey(
+    formula,
+    normalizedStyle,
+    `markup:${output}`,
+  );
+  const cachedMarkup = getCachedEntry(formulaMarkupCache, cacheKey);
 
-  return katex.renderToString(formula, {
+  if (cachedMarkup) {
+    return cachedMarkup;
+  }
+
+  const markup = katex.renderToString(formula, {
     displayMode: normalizedStyle.displayMode,
     output,
     throwOnError: false,
     strict: "ignore",
   });
+
+  touchCacheEntry(formulaMarkupCache, cacheKey, markup);
+
+  return markup;
 };
 
 export const renderMathFormulaMarkup = (
@@ -127,6 +192,20 @@ const createMeasurementContainer = (
   container.style.background = "transparent";
   container.innerHTML = markup;
 
+  const katexDisplay = container.querySelector<HTMLElement>(".katex-display");
+  if (katexDisplay) {
+    katexDisplay.style.margin = "0";
+    katexDisplay.style.overflow = "visible hidden";
+  }
+
+  const katexRoot = container.querySelector<HTMLElement>(
+    ".katex-display > .katex, .katex",
+  );
+  if (katexRoot) {
+    katexRoot.style.display = "block";
+    katexRoot.style.maxWidth = "100%";
+  }
+
   return container;
 };
 
@@ -155,7 +234,7 @@ const measureFormula = (
     FORMULA_PADDING_X * 2 + formulaLengthFallback(markup, style.fontSize),
   );
   const height = Math.max(
-    (Math.ceil(rect.height) || 0) + FORMULA_MEASUREMENT_SLACK,
+    (Math.ceil(rect.height) || 0) + getFormulaMeasurementSlack(style),
     FORMULA_PADDING_Y * 2 + style.fontSize,
   );
 
@@ -173,9 +252,10 @@ const measureFormula = (
   };
 };
 
-export const measureMathFormulaDimensions = (
+const getMeasuredMathFormula = (
   formula: string,
   style?: Partial<MathFormulaStyle> | null,
+  output: "htmlAndMathml" | "mathml" = "htmlAndMathml",
 ) => {
   const normalizedFormula = formula.trim();
 
@@ -184,19 +264,48 @@ export const measureMathFormulaDimensions = (
   }
 
   const normalizedStyle = normalizeMathFormulaStyle(style);
-  const markup = renderMathFormulaMarkup(normalizedFormula, normalizedStyle);
+  const cacheKey = getMathFormulaCacheKey(
+    normalizedFormula,
+    normalizedStyle,
+    `measure:${output}`,
+  );
+  const cachedMeasurement = getCachedEntry(formulaMeasureCache, cacheKey);
+
+  if (cachedMeasurement) {
+    return {
+      width: cachedMeasurement.width,
+      height: cachedMeasurement.height,
+      markup: cachedMeasurement.markup,
+      style: cachedMeasurement.style,
+    };
+  }
+
+  const markup =
+    output === "mathml"
+      ? renderMathFormulaExportMarkup(normalizedFormula, normalizedStyle)
+      : renderMathFormulaMarkup(normalizedFormula, normalizedStyle);
   const { width, height } = measureFormula(
     normalizedFormula,
     markup,
     normalizedStyle,
   );
-
-  return {
+  const measurement = {
     width,
     height,
-    style: normalizedStyle,
     markup,
+    style: normalizedStyle,
   };
+
+  touchCacheEntry(formulaMeasureCache, cacheKey, measurement);
+
+  return measurement;
+};
+
+export const measureMathFormulaDimensions = (
+  formula: string,
+  style?: Partial<MathFormulaStyle> | null,
+) => {
+  return getMeasuredMathFormula(formula, style, "htmlAndMathml");
 };
 
 const createFormulaSvg = (
@@ -252,21 +361,12 @@ export const createMathFormulaAsset = async (
   style: MathFormulaStyle;
 }> => {
   const normalizedFormula = formula.trim();
-
-  if (!normalizedFormula) {
-    throw new Error("Formula cannot be empty.");
-  }
-
-  const normalizedStyle = normalizeMathFormulaStyle(style);
-  const markup = renderMathFormulaExportMarkup(
-    normalizedFormula,
-    normalizedStyle,
-  );
-  const { width, height } = measureFormula(
-    normalizedFormula,
+  const {
+    width,
+    height,
     markup,
-    normalizedStyle,
-  );
+    style: normalizedStyle,
+  } = getMeasuredMathFormula(normalizedFormula, style, "mathml");
   const svg = createFormulaSvg(
     normalizedFormula,
     markup,

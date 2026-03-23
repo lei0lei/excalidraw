@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type {
   ExcalidrawEmbeddableElement,
@@ -14,12 +14,16 @@ import {
 
 import "./MathFormulaEmbeddable.scss";
 
+const CONTENT_PADDING_X = 10;
+const CONTENT_PADDING_Y = 6;
+
 type MathFormulaEmbeddableProps = {
   element: NonDeleted<ExcalidrawEmbeddableElement>;
   formula: string;
   style?: Partial<MathFormulaStyle> | null;
   intrinsicWidth?: number;
   intrinsicHeight?: number;
+  onAutoResize?: (size: { width: number; height: number }) => void;
 };
 
 export const MathFormulaEmbeddable = ({
@@ -28,7 +32,13 @@ export const MathFormulaEmbeddable = ({
   style,
   intrinsicWidth,
   intrinsicHeight,
+  onAutoResize,
 }: MathFormulaEmbeddableProps) => {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [measuredSize, setMeasuredSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const normalizedStyle = useMemo(
     () => normalizeMathFormulaStyle(style),
     [style],
@@ -44,9 +54,79 @@ export const MathFormulaEmbeddable = ({
 
   const width = Math.max(element.width, 1);
   const height = Math.max(element.height, 1);
-  const baseWidth = intrinsicWidth || width;
-  const baseHeight = intrinsicHeight || height;
+  const baseWidth = Math.max(intrinsicWidth || 0, measuredSize?.width || 0, 1);
+  const baseHeight = Math.max(
+    intrinsicHeight || 0,
+    measuredSize?.height || 0,
+    1,
+  );
   const scale = Math.min(width / baseWidth, height / baseHeight);
+
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+
+    if (!content) {
+      return;
+    }
+
+    let animationFrameId = 0;
+
+    const measure = () => {
+      const formulaNode = content.querySelector<HTMLElement>(
+        ".katex-display > .katex, .katex",
+      );
+      const naturalWidth =
+        formulaNode?.scrollWidth ||
+        formulaNode?.offsetWidth ||
+        content.scrollWidth ||
+        content.offsetWidth ||
+        0;
+      const naturalHeight =
+        formulaNode?.scrollHeight ||
+        formulaNode?.offsetHeight ||
+        content.scrollHeight ||
+        content.offsetHeight ||
+        0;
+      const nextWidth = Math.ceil(
+        Math.max(naturalWidth, 1) + CONTENT_PADDING_X * 2,
+      );
+      const nextHeight = Math.ceil(
+        Math.max(naturalHeight, 1) + CONTENT_PADDING_Y * 2,
+      );
+
+      setMeasuredSize((prev) => {
+        if (prev?.width === nextWidth && prev?.height === nextHeight) {
+          return prev;
+        }
+
+        return {
+          width: nextWidth,
+          height: nextHeight,
+        };
+      });
+    };
+
+    animationFrameId = window.requestAnimationFrame(measure);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [formula, normalizedStyle]);
+
+  useLayoutEffect(() => {
+    if (!measuredSize || !onAutoResize) {
+      return;
+    }
+
+    if (
+      Math.abs(measuredSize.width - (intrinsicWidth || 0)) < 2 &&
+      Math.abs(measuredSize.height - (intrinsicHeight || 0)) < 2
+    ) {
+      return;
+    }
+
+    onAutoResize(measuredSize);
+  }, [intrinsicHeight, intrinsicWidth, measuredSize, onAutoResize]);
 
   return (
     <div className="MathFormulaEmbeddable" role="presentation">
@@ -61,11 +141,16 @@ export const MathFormulaEmbeddable = ({
           fontSize: normalizedStyle.fontSize,
           fontFamily: metadata.fontFamily,
           textShadow: metadata.textShadow,
-          justifyContent: normalizedStyle.displayMode ? "center" : "flex-start",
         }}
       >
         <div
+          ref={contentRef}
           className="MathFormulaEmbeddable__content"
+          style={{
+            justifyContent: normalizedStyle.displayMode
+              ? "center"
+              : "flex-start",
+          }}
           dangerouslySetInnerHTML={{ __html: previewMarkup }}
         />
       </div>
