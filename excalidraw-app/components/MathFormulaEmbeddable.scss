@@ -25,20 +25,30 @@
       padding: 6px 10px;
       box-sizing: border-box;
       overflow: hidden;
+    }
+
+    &__formula {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: flex-start;
+      justify-content: flex-start;
+      width: max-content;
+      min-width: 0;
+      max-width: none;
 
       .katex-display {
-        width: 100%;
+        width: auto;
         margin: 0;
-        overflow: visible hidden;
+        overflow: visible;
       }
 
       .katex-display > .katex {
-        display: block;
+        display: inline-block;
         text-align: inherit;
       }
 
       .katex {
-        max-width: 100%;
+        max-width: none;
       }
     }
   }

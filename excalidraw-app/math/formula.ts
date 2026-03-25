@@ -169,9 +169,6 @@ export const getMathFormulaRenderMetadata = (
   };
 };
 
-export const getMathFormulaEmbeddableLink = (id: string) =>
-  `math://formula/${id}`;
-
 const createMeasurementContainer = (
   markup: string,
   style: MathFormulaStyle,
@@ -195,15 +192,16 @@ const createMeasurementContainer = (
   const katexDisplay = container.querySelector<HTMLElement>(".katex-display");
   if (katexDisplay) {
     katexDisplay.style.margin = "0";
-    katexDisplay.style.overflow = "visible hidden";
+    katexDisplay.style.width = "auto";
+    katexDisplay.style.overflow = "visible";
   }
 
   const katexRoot = container.querySelector<HTMLElement>(
     ".katex-display > .katex, .katex",
   );
   if (katexRoot) {
-    katexRoot.style.display = "block";
-    katexRoot.style.maxWidth = "100%";
+    katexRoot.style.display = "inline-block";
+    katexRoot.style.maxWidth = "none";
   }
 
   return container;

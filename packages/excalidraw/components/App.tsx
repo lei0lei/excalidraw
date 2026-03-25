@@ -520,6 +520,25 @@ const editorLifecycleEventBehavior = {
   "editor:unmount": { cardinality: "once", replay: "last" },
 } as const;
 
+const isMathFormulaEmbeddable = (
+  element: ExcalidrawElement | null | undefined,
+): boolean => {
+  if (!element || !isEmbeddableElement(element)) {
+    return false;
+  }
+
+  const customData = element.customData as
+    | {
+        formulaType?: string;
+      }
+    | undefined;
+
+  return (
+    element.link?.startsWith("math://formula/") === true ||
+    customData?.formulaType === "math"
+  );
+};
+
 export const ExcalidrawContainerContext = React.createContext<{
   container: HTMLDivElement | null;
   id: string | null;
@@ -1266,6 +1285,7 @@ class App extends React.Component<AppProps, AppState> {
     if (
       hitElement &&
       isIframeLikeElement(hitElement) &&
+      !isMathFormulaEmbeddable(hitElement) &&
       (this.state.viewModeEnabled ||
         this.state.activeTool.type === "laser" ||
         this.isIframeLikeElementCenter(
@@ -1340,6 +1360,7 @@ class App extends React.Component<AppProps, AppState> {
         300 &&
       gesture.pointers.size < 2 &&
       isIframeLikeElement(hitElement) &&
+      !isMathFormulaEmbeddable(hitElement) &&
       (this.state.viewModeEnabled ||
         this.state.activeTool.type === "laser" ||
         this.isIframeLikeElementCenter(
@@ -1353,7 +1374,12 @@ class App extends React.Component<AppProps, AppState> {
       return false;
     }
 
-    const iframeLikeElement = hitElement;
+    const iframeLikeElement =
+      hitElement as NonDeleted<ExcalidrawIframeLikeElement>;
+
+    if (isMathFormulaEmbeddable(iframeLikeElement)) {
+      return false;
+    }
 
     if (
       this.state.activeEmbeddable?.element === iframeLikeElement &&
@@ -1475,7 +1501,12 @@ class App extends React.Component<AppProps, AppState> {
     this.scene.getNonDeletedElements().filter((element) => {
       if (isEmbeddableElement(element)) {
         iframeLikes.add(element.id);
-        if (!this.embedsValidationStatus.has(element.id)) {
+        if (isMathFormulaEmbeddable(element)) {
+          if (this.embedsValidationStatus.get(element.id) !== true) {
+            updated = true;
+            this.updateEmbedValidationStatus(element, true);
+          }
+        } else if (!this.embedsValidationStatus.has(element.id)) {
           updated = true;
 
           const validated = embeddableURLValidator(
@@ -1513,7 +1544,8 @@ class App extends React.Component<AppProps, AppState> {
       .filter(
         (el): el is Ordered<NonDeleted<ExcalidrawIframeLikeElement>> =>
           (isEmbeddableElement(el) &&
-            this.embedsValidationStatus.get(el.id) === true) ||
+            (isMathFormulaEmbeddable(el) ||
+              this.embedsValidationStatus.get(el.id) === true)) ||
           isIframeElement(el),
       );
 
@@ -1680,6 +1712,8 @@ class App extends React.Component<AppProps, AppState> {
                 },
               } as const;
             }
+          } else if (isMathFormulaEmbeddable(el)) {
+            src = null;
           } else {
             src = getEmbedLink(toValidURL(el.link || ""));
           }
@@ -6295,7 +6329,10 @@ class App extends React.Component<AppProps, AppState> {
     if (!event[KEYS.CTRL_OR_CMD] && !this.state.viewModeEnabled) {
       const hitElement = this.getElementAtPosition(sceneX, sceneY);
 
-      if (isIframeLikeElement(hitElement)) {
+      if (
+        isIframeLikeElement(hitElement) &&
+        !isMathFormulaEmbeddable(hitElement)
+      ) {
         this.setState({
           activeEmbeddable: { element: hitElement, state: "active" },
         });
@@ -7004,6 +7041,7 @@ class App extends React.Component<AppProps, AppState> {
       if (
         hitElement &&
         (hitElement.link || isEmbeddableElement(hitElement)) &&
+        !isMathFormulaEmbeddable(hitElement) &&
         this.state.selectedElementIds[hitElement.id] &&
         !this.state.contextMenu &&
         !this.state.showHyperlinkPopup
@@ -7594,7 +7632,8 @@ class App extends React.Component<AppProps, AppState> {
               this,
             ),
             showHyperlinkPopup:
-              hitElement.link || isEmbeddableElement(hitElement)
+              (hitElement.link || isEmbeddableElement(hitElement)) &&
+              !isMathFormulaEmbeddable(hitElement)
                 ? "info"
                 : false,
           };
@@ -8452,7 +8491,8 @@ class App extends React.Component<AppProps, AppState> {
                     this,
                   ),
                   showHyperlinkPopup:
-                    hitElement.link || isEmbeddableElement(hitElement)
+                    (hitElement.link || isEmbeddableElement(hitElement)) &&
+                    !isMathFormulaEmbeddable(hitElement)
                       ? "info"
                       : false,
                 };
@@ -10075,7 +10115,8 @@ class App extends React.Component<AppProps, AppState> {
               showHyperlinkPopup:
                 elementsWithinSelection.length === 1 &&
                 (elementsWithinSelection[0].link ||
-                  isEmbeddableElement(elementsWithinSelection[0]))
+                  isEmbeddableElement(elementsWithinSelection[0])) &&
+                !isMathFormulaEmbeddable(elementsWithinSelection[0])
                   ? "info"
                   : false,
             };
@@ -10924,7 +10965,8 @@ class App extends React.Component<AppProps, AppState> {
                   this,
                 ),
                 showHyperlinkPopup:
-                  hitElement.link || isEmbeddableElement(hitElement)
+                  (hitElement.link || isEmbeddableElement(hitElement)) &&
+                  !isMathFormulaEmbeddable(hitElement)
                     ? "info"
                     : false,
               };
@@ -11915,6 +11957,8 @@ class App extends React.Component<AppProps, AppState> {
     });
 
     if (!isBindingElement(newElement)) {
+      const shouldKeepAspectRatioForNewElement =
+        isImageElement(newElement) || isMathFormulaEmbeddable(newElement);
       dragNewElement({
         newElement,
         elementType: this.state.activeTool.type,
@@ -11924,7 +11968,7 @@ class App extends React.Component<AppProps, AppState> {
         y: gridY,
         width: distance(pointerDownState.originInGrid.x, gridX),
         height: distance(pointerDownState.originInGrid.y, gridY),
-        shouldMaintainAspectRatio: isImageElement(newElement)
+        shouldMaintainAspectRatio: shouldKeepAspectRatioForNewElement
           ? !shouldMaintainAspectRatio(event)
           : shouldMaintainAspectRatio(event),
         shouldResizeFromCenter: shouldResizeFromCenter(event),
@@ -12151,7 +12195,10 @@ class App extends React.Component<AppProps, AppState> {
         this.scene,
         shouldRotateWithDiscreteAngle(event),
         shouldResizeFromCenter(event),
-        selectedElements.some((element) => isImageElement(element))
+        selectedElements.some(
+          (element) =>
+            isImageElement(element) || isMathFormulaEmbeddable(element),
+        )
           ? !shouldMaintainAspectRatio(event)
           : shouldMaintainAspectRatio(event),
         resizeX,

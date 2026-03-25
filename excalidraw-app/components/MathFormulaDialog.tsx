@@ -7,7 +7,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
@@ -22,20 +21,13 @@ import {
 
 import "./MathFormulaDialog.scss";
 
-const FORMULA_COLOR_PRESETS = [
-  "#1d1d3a",
-  "#0f766e",
-  "#1d4ed8",
-  "#7c3aed",
-  "#b91c1c",
-];
-
 const FONT_SIZE_PRESETS = [
   { label: "S", value: 20 },
   { label: "M", value: 28 },
   { label: "L", value: 36 },
   { label: "XL", value: 48 },
 ];
+
 type MathFormulaDialogProps = {
   initialValue?: string;
   initialStyle?: Partial<MathFormulaStyle> | null;
@@ -124,8 +116,9 @@ export const MathFormulaDialog = ({
 
   return (
     <Dialog
-      size="small"
-      title={mode === "edit" ? "Edit math formula" : "Math formula"}
+      size="regular"
+      className="MathFormulaDialog__dialog"
+      title={mode === "edit" ? "Equation" : "New equation"}
       onCloseRequest={onClose}
       autofocus={false}
       closeOnClickOutside={true}
@@ -134,37 +127,9 @@ export const MathFormulaDialog = ({
         className="MathFormulaDialog"
         onSubmit={(event) => void handleSubmit(event)}
       >
-        <div className="MathFormulaDialog__field">
-          <label
-            className="MathFormulaDialog__label"
-            htmlFor="math-formula-input"
-          >
-            LaTeX
-          </label>
-          <textarea
-            id="math-formula-input"
-            ref={textareaRef}
-            className="MathFormulaDialog__textarea"
-            value={formula}
-            onChange={(event) => {
-              setFormula(event.target.value);
-              if (submitError) {
-                setSubmitError("");
-              }
-            }}
-            onKeyDown={handleKeyDown}
-            rows={4}
-            spellCheck={false}
-            placeholder={DEFAULT_MATH_FORMULA}
-          />
-          <div className="MathFormulaDialog__hint">
-            Press Ctrl/Cmd + Enter to {primaryActionLabel.toLowerCase()}.
-          </div>
-        </div>
-
-        <div className="MathFormulaDialog__stylePanel">
-          <div className="MathFormulaDialog__styleGroup">
-            <div className="MathFormulaDialog__styleLabel">Size</div>
+        <div className="MathFormulaDialog__toolbar">
+          <div className="MathFormulaDialog__toolbarGroup">
+            <span className="MathFormulaDialog__toolbarHint">Size</span>
             <div className="MathFormulaDialog__sizeOptions">
               {FONT_SIZE_PRESETS.map((preset) => (
                 <button
@@ -175,6 +140,7 @@ export const MathFormulaDialog = ({
                   onClick={() =>
                     setStyle((prev) => ({ ...prev, fontSize: preset.value }))
                   }
+                  title={`Font size ${preset.label}`}
                 >
                   {preset.label}
                 </button>
@@ -182,42 +148,7 @@ export const MathFormulaDialog = ({
             </div>
           </div>
 
-          <div className="MathFormulaDialog__styleGroup">
-            <div className="MathFormulaDialog__styleLabel">Color</div>
-            <div className="MathFormulaDialog__colorOptions">
-              {FORMULA_COLOR_PRESETS.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  className="MathFormulaDialog__colorSwatch"
-                  data-active={
-                    style.color.toLowerCase() === color.toLowerCase()
-                  }
-                  style={{ "--formula-color": color } as CSSProperties}
-                  onClick={() => setStyle((prev) => ({ ...prev, color }))}
-                  aria-label={`Set formula color ${color}`}
-                />
-              ))}
-              <label
-                className="MathFormulaDialog__colorPicker"
-                title="Custom color"
-              >
-                <input
-                  type="color"
-                  value={style.color}
-                  onChange={(event) =>
-                    setStyle((prev) => ({
-                      ...prev,
-                      color: event.target.value,
-                    }))
-                  }
-                  aria-label="Custom formula color"
-                />
-              </label>
-            </div>
-          </div>
-
-          <label className="MathFormulaDialog__toggle">
+          <label className="MathFormulaDialog__toggle" title="Display mode">
             <input
               type="checkbox"
               checked={style.displayMode}
@@ -228,24 +159,45 @@ export const MathFormulaDialog = ({
                 }))
               }
             />
-            <span>Display mode</span>
+            <span>Block</span>
           </label>
         </div>
 
-        <div className="MathFormulaDialog__preview">
-          <div className="MathFormulaDialog__previewLabel">Preview</div>
-          <div className="MathFormulaDialog__previewSurface">
-            <div
-              className="MathFormulaDialog__previewContent"
-              style={{
-                color: style.color,
-                fontSize: style.fontSize,
-                fontFamily: previewMetadata.fontFamily,
-                textShadow: previewMetadata.textShadow,
-                justifyContent: style.displayMode ? "center" : "flex-start",
+        <div className="MathFormulaDialog__surface">
+          <div className="MathFormulaDialog__panel MathFormulaDialog__panel--editor">
+            <div className="MathFormulaDialog__panelLabel">Source</div>
+            <textarea
+              id="math-formula-input"
+              ref={textareaRef}
+              className="MathFormulaDialog__textarea"
+              value={formula}
+              onChange={(event) => {
+                setFormula(event.target.value);
+                if (submitError) {
+                  setSubmitError("");
+                }
               }}
-              dangerouslySetInnerHTML={{ __html: previewMarkup }}
+              onKeyDown={handleKeyDown}
+              rows={4}
+              spellCheck={false}
+              placeholder={DEFAULT_MATH_FORMULA}
             />
+          </div>
+          <div className="MathFormulaDialog__panel MathFormulaDialog__panel--preview">
+            <div className="MathFormulaDialog__panelLabel">Preview</div>
+            <div className="MathFormulaDialog__previewSurface">
+              <div
+                className="MathFormulaDialog__previewContent"
+                style={{
+                  color: style.color,
+                  fontSize: style.fontSize,
+                  fontFamily: previewMetadata.fontFamily,
+                  textShadow: previewMetadata.textShadow,
+                  justifyContent: style.displayMode ? "center" : "flex-start",
+                }}
+                dangerouslySetInnerHTML={{ __html: previewMarkup }}
+              />
+            </div>
           </div>
         </div>
 
@@ -254,6 +206,7 @@ export const MathFormulaDialog = ({
         )}
 
         <div className="MathFormulaDialog__actions">
+          <div className="MathFormulaDialog__hint">Ctrl/Cmd + Enter</div>
           <DialogActionButton
             label={t("buttons.cancel")}
             onClick={onClose}

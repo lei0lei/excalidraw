@@ -66,6 +66,7 @@ import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconc
 import type { RestoredDataState } from "@excalidraw/excalidraw/data/restore";
 import type {
   ExcalidrawEmbeddableElement,
+  ExcalidrawElement,
   FileId,
   NonDeleted,
   NonDeletedExcalidrawElement,
@@ -164,7 +165,6 @@ import {
 } from "./workspace/data/saveManager";
 import {
   createMathFormulaAsset,
-  getMathFormulaEmbeddableLink,
   measureMathFormulaDimensions,
   normalizeMathFormulaStyle,
   type MathFormulaStyle,
@@ -359,6 +359,55 @@ const getMathFormulaElementData = (
       typeof customData.intrinsicHeight === "number"
         ? customData.intrinsicHeight
         : undefined,
+  };
+};
+
+const stripMathFormulaLinks = <T extends ExcalidrawElement>(
+  elements: readonly T[],
+): readonly T[] => {
+  let didChange = false;
+
+  const nextElements = elements.map((element) => {
+    const customData = element.customData as
+      | {
+          formulaType?: string;
+        }
+      | undefined;
+
+    if (customData?.formulaType === "math" && element.link) {
+      didChange = true;
+      return {
+        ...element,
+        link: null,
+      };
+    }
+
+    return element;
+  }) as T[];
+
+  return didChange ? nextElements : elements;
+};
+
+const sanitizeMathFormulaScene = <
+  T extends {
+    elements?: readonly ExcalidrawElement[] | null;
+  },
+>(
+  scene: T | null,
+): T | null => {
+  if (!scene?.elements) {
+    return scene;
+  }
+
+  const nextElements = stripMathFormulaLinks(scene.elements);
+
+  if (nextElements === scene.elements) {
+    return scene;
+  }
+
+  return {
+    ...scene,
+    elements: nextElements,
   };
 };
 
@@ -735,7 +784,7 @@ const ExcalidrawWrapper = () => {
             y: centerY - height / 2,
             width,
             height,
-            link: getMathFormulaEmbeddableLink(targetElement.id),
+            link: null,
             customData: formulaCustomData,
           });
         } else if (isInitializedImageElement(targetElement)) {
@@ -803,7 +852,6 @@ const ExcalidrawWrapper = () => {
       });
 
       embeddableElement = newElementWith(embeddableElement, {
-        link: getMathFormulaEmbeddableLink(embeddableElement.id),
         customData: formulaCustomData,
       });
 
@@ -939,6 +987,7 @@ const ExcalidrawWrapper = () => {
     }
 
     initializeScene({ collabAPI, excalidrawAPI }).then(async (data) => {
+      data.scene = sanitizeMathFormulaScene(data.scene);
       loadImages(data, /* isInitialLoad */ true);
       initialStatePromiseRef.current.promise.resolve(data.scene);
     });
@@ -956,6 +1005,7 @@ const ExcalidrawWrapper = () => {
         excalidrawAPI.updateScene({ appState: { isLoading: true } });
 
         initializeScene({ collabAPI, excalidrawAPI }).then((data) => {
+          data.scene = sanitizeMathFormulaScene(data.scene);
           loadImages(data);
           if (data.scene) {
             excalidrawAPI.updateScene({
@@ -984,7 +1034,7 @@ const ExcalidrawWrapper = () => {
           const username = importUsernameFromLocalStorage();
           setLangCode(getPreferredLanguage());
           excalidrawAPI.updateScene({
-            ...localDataState,
+            ...sanitizeMathFormulaScene(localDataState),
             captureUpdate: CaptureUpdateAction.NEVER,
           });
           LibraryIndexedDBAdapter.load().then((data) => {
@@ -1273,9 +1323,10 @@ const ExcalidrawWrapper = () => {
         excalidrawAPI.getAppState(),
         excalidrawAPI.getSceneElementsIncludingDeleted(),
       );
+      const sanitizedElements = stripMathFormulaLinks(loadedScene.elements);
 
       excalidrawAPI.updateScene({
-        elements: loadedScene.elements,
+        elements: sanitizedElements,
         appState: {
           ...loadedScene.appState,
           name:
@@ -1317,9 +1368,10 @@ const ExcalidrawWrapper = () => {
         excalidrawAPI.getAppState(),
         excalidrawAPI.getSceneElementsIncludingDeleted(),
       );
+      const sanitizedElements = stripMathFormulaLinks(loadedScene.elements);
 
       excalidrawAPI.updateScene({
-        elements: loadedScene.elements,
+        elements: sanitizedElements,
         appState: {
           ...loadedScene.appState,
           name:
@@ -1776,14 +1828,6 @@ const ExcalidrawWrapper = () => {
     [excalidrawAPI],
   );
 
-  const validateEmbeddable = useCallback((link: string) => {
-    if (link.startsWith("math://formula/")) {
-      return true;
-    }
-
-    return undefined;
-  }, []);
-
   const handleAutoResizeMathFormula = useCallback(
     (elementId: string, size: { width: number; height: number }) => {
       if (!excalidrawAPI) {
@@ -1841,6 +1885,7 @@ const ExcalidrawWrapper = () => {
         y: targetElement.y + targetElement.height / 2 - nextHeight / 2,
         width: nextWidth,
         height: nextHeight,
+        link: null,
         customData: {
           ...currentCustomData,
           intrinsicWidth: nextIntrinsicWidth,
@@ -1976,7 +2021,6 @@ const ExcalidrawWrapper = () => {
         }}
         langCode={langCode}
         renderCustomStats={renderCustomStats}
-        validateEmbeddable={validateEmbeddable}
         renderEmbeddable={renderEmbeddable}
         detectScroll={false}
         handleKeyboardGlobally={true}

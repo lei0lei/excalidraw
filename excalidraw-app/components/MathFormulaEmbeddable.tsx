@@ -34,7 +34,7 @@ export const MathFormulaEmbeddable = ({
   intrinsicHeight,
   onAutoResize,
 }: MathFormulaEmbeddableProps) => {
-  const contentRef = useRef<HTMLDivElement | null>(null);
+  const formulaRef = useRef<HTMLDivElement | null>(null);
   const [measuredSize, setMeasuredSize] = useState<{
     width: number;
     height: number;
@@ -63,30 +63,19 @@ export const MathFormulaEmbeddable = ({
   const scale = Math.min(width / baseWidth, height / baseHeight);
 
   useLayoutEffect(() => {
-    const content = contentRef.current;
+    const formulaNode = formulaRef.current;
 
-    if (!content) {
+    if (!formulaNode) {
       return;
     }
 
     let animationFrameId = 0;
 
     const measure = () => {
-      const formulaNode = content.querySelector<HTMLElement>(
-        ".katex-display > .katex, .katex",
-      );
       const naturalWidth =
-        formulaNode?.scrollWidth ||
-        formulaNode?.offsetWidth ||
-        content.scrollWidth ||
-        content.offsetWidth ||
-        0;
+        formulaNode.scrollWidth || formulaNode.offsetWidth || 0;
       const naturalHeight =
-        formulaNode?.scrollHeight ||
-        formulaNode?.offsetHeight ||
-        content.scrollHeight ||
-        content.offsetHeight ||
-        0;
+        formulaNode.scrollHeight || formulaNode.offsetHeight || 0;
       const nextWidth = Math.ceil(
         Math.max(naturalWidth, 1) + CONTENT_PADDING_X * 2,
       );
@@ -144,15 +133,19 @@ export const MathFormulaEmbeddable = ({
         }}
       >
         <div
-          ref={contentRef}
           className="MathFormulaEmbeddable__content"
           style={{
             justifyContent: normalizedStyle.displayMode
               ? "center"
               : "flex-start",
           }}
-          dangerouslySetInnerHTML={{ __html: previewMarkup }}
-        />
+        >
+          <div
+            ref={formulaRef}
+            className="MathFormulaEmbeddable__formula"
+            dangerouslySetInnerHTML={{ __html: previewMarkup }}
+          />
+        </div>
       </div>
     </div>
   );
