@@ -329,6 +329,36 @@ export const updateLocalFile = async ({
   });
 };
 
+export const getLocalFileMetadata = async ({
+  fileHandle,
+  name,
+  parentId,
+  path,
+  directoryHandle,
+  parentDirectoryHandle,
+}: {
+  fileHandle: FileSystemFileHandle;
+  name: string;
+  parentId: string | null;
+  path: string;
+  directoryHandle: FileSystemDirectoryHandle;
+  parentDirectoryHandle: FileSystemDirectoryHandle;
+}) => {
+  const parentPath = path.split("/").slice(0, -1).join("/");
+
+  return toLocalFile({
+    fileHandle,
+    parent: {
+      id: parentId || LOCAL_ROOT_ID,
+      name: directoryHandle.name,
+      parentId: null,
+      path: parentPath,
+      directoryHandle,
+      parentDirectoryHandle,
+    },
+  });
+};
+
 export const renameLocalFile = async ({
   file,
   name,

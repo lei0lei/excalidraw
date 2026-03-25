@@ -58,6 +58,7 @@ import { Fonts } from "../fonts";
 import { renderStaticScene } from "../renderer/staticScene";
 import { renderSceneToSvg } from "../renderer/staticSvgScene";
 
+import { replaceCodeBlockEmbeddablesForExport } from "./codeBlock";
 import { replaceMathFormulaEmbeddablesForExport } from "./mathFormula";
 
 import type { RenderableElementsMap } from "./types";
@@ -202,9 +203,13 @@ export const exportToCanvas = async (
   // load font faces before continuing, by default leverages browsers' [FontFace API](https://developer.mozilla.org/en-US/docs/Web/API/FontFace)
   await loadFonts();
 
-  const exportData = await replaceMathFormulaEmbeddablesForExport(
+  let exportData = await replaceMathFormulaEmbeddablesForExport(
     elements,
     files,
+  );
+  exportData = await replaceCodeBlockEmbeddablesForExport(
+    exportData.elements,
+    exportData.files,
   );
   elements = exportData.elements;
   files = exportData.files;
@@ -313,9 +318,13 @@ export const exportToSvg = async (
     reuseImages?: boolean;
   },
 ): Promise<SVGSVGElement> => {
-  const exportData = await replaceMathFormulaEmbeddablesForExport(
+  let exportData = await replaceMathFormulaEmbeddablesForExport(
     elements,
     files,
+  );
+  exportData = await replaceCodeBlockEmbeddablesForExport(
+    exportData.elements,
+    exportData.files,
   );
   const renderElements = exportData.elements;
   const renderFiles = exportData.files;

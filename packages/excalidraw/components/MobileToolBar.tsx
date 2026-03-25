@@ -30,6 +30,7 @@ import {
   ImageIcon,
   frameToolIcon,
   EmbedIcon,
+  codeIcon,
   laserPointerToolIcon,
   LassoIcon,
   mermaidLogoIcon,
@@ -445,6 +446,19 @@ export const MobileToolBar = ({
             selected={embeddableToolSelected}
           >
             {t("toolBar.embeddable")}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() =>
+              app.setActiveTool({ type: "custom", customType: "code-block" })
+            }
+            icon={codeIcon}
+            data-testid="toolbar-code-block"
+            selected={
+              app.state.activeTool.type === "custom" &&
+              app.state.activeTool.customType === "code-block"
+            }
+          >
+            Code block
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}

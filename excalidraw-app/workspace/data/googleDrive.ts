@@ -661,6 +661,35 @@ export const updateGoogleDriveFile = async ({
   });
 };
 
+export const getGoogleDriveFileMetadata = async (fileId: string) => {
+  const token = await getGoogleDriveAccessToken();
+  const url = new URL(`${GOOGLE_DRIVE_FILES_API}/${fileId}`);
+  url.searchParams.set("supportsAllDrives", "true");
+  url.searchParams.set("fields", "id,name,mimeType,modifiedTime,parents");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Google Drive metadata request failed: ${await parseGoogleDriveError(
+        response,
+      )}`,
+    );
+  }
+
+  return response.json() as Promise<{
+    id: string;
+    name: string;
+    mimeType: string;
+    modifiedTime?: string;
+    parents?: string[];
+  }>;
+};
+
 export const pickGoogleDriveRootFolder =
   async (): Promise<GoogleDriveRootFolder | null> => {
     const { apiKey, appId } = assertGoogleDriveConfig();

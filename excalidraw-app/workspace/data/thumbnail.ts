@@ -121,6 +121,92 @@ export const getCachedExcalidrawThumbnail = async (
   });
 };
 
+export const getLatestCachedExcalidrawThumbnailForFile = async (
+  fileId: string,
+): Promise<CachedThumbnailState | null> => {
+  const cacheKeyPrefix = `${fileId}:`;
+  let newestRecord: StoredThumbnailRecord | null = null;
+
+  thumbnailMemoryCache.forEach((record, key) => {
+    if (!key.startsWith(cacheKeyPrefix)) {
+      return;
+    }
+
+    if (isThumbnailRecordExpired(record)) {
+      thumbnailMemoryCache.delete(key);
+      return;
+    }
+
+    if (!newestRecord || record.updatedAt > newestRecord.updatedAt) {
+      newestRecord = record;
+    }
+  });
+
+  if (newestRecord) {
+    return toCachedThumbnailState(newestRecord);
+  }
+
+  const db = await openThumbnailCacheDb();
+  if (!db) {
+    return null;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction(THUMBNAIL_STORE_NAME, "readonly");
+      const store = transaction.objectStore(THUMBNAIL_STORE_NAME);
+      const request = store.openCursor();
+
+      request.onsuccess = () => {
+        const cursor = request.result;
+
+        if (!cursor) {
+          resolve(newestRecord ? toCachedThumbnailState(newestRecord) : null);
+          return;
+        }
+
+        const key = String(cursor.primaryKey);
+        const value = cursor.value as StoredThumbnailRecord;
+
+        if (!key.startsWith(cacheKeyPrefix)) {
+          cursor.continue();
+          return;
+        }
+
+        if (isThumbnailRecordExpired(value)) {
+          thumbnailMemoryCache.delete(key);
+          cursor.continue();
+          return;
+        }
+
+        thumbnailMemoryCache.set(key, value);
+        if (!newestRecord || value.updatedAt > newestRecord.updatedAt) {
+          newestRecord = value;
+        }
+
+        cursor.continue();
+      };
+
+      request.onerror = () => {
+        resolve(newestRecord ? toCachedThumbnailState(newestRecord) : null);
+      };
+
+      transaction.oncomplete = () => {
+        db.close();
+      };
+      transaction.onerror = () => {
+        db.close();
+      };
+      transaction.onabort = () => {
+        db.close();
+      };
+    } catch {
+      db.close();
+      resolve(null);
+    }
+  });
+};
+
 const cleanupThumbnailCache = async () => {
   const db = await openThumbnailCacheDb();
   if (!db) {

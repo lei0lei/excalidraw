@@ -811,6 +811,18 @@ body.excalidraw-cursor-resize * {
     border-radius: var(--embeddable-radius);
   }
 
+  &.is-custom-renderable {
+    .excalidraw__embeddable-container__inner {
+      align-items: flex-start;
+      justify-content: flex-start;
+      border-radius: 0;
+    }
+
+    .excalidraw__embeddable__outer > * {
+      border-radius: 0;
+    }
+  }
+
   .excalidraw__embeddable__outer {
     width: 100%;
     height: 100%;

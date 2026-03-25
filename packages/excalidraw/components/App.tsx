@@ -539,6 +539,27 @@ const isMathFormulaEmbeddable = (
   );
 };
 
+const isCodeBlockEmbeddable = (
+  element: ExcalidrawElement | null | undefined,
+): boolean => {
+  if (!element || !isEmbeddableElement(element)) {
+    return false;
+  }
+
+  const customData = element.customData as
+    | {
+        codeBlockType?: string;
+      }
+    | undefined;
+
+  return customData?.codeBlockType === "code";
+};
+
+const isCustomRenderableEmbeddable = (
+  element: ExcalidrawElement | null | undefined,
+): boolean =>
+  isMathFormulaEmbeddable(element) || isCodeBlockEmbeddable(element);
+
 export const ExcalidrawContainerContext = React.createContext<{
   container: HTMLDivElement | null;
   id: string | null;
@@ -1285,7 +1306,7 @@ class App extends React.Component<AppProps, AppState> {
     if (
       hitElement &&
       isIframeLikeElement(hitElement) &&
-      !isMathFormulaEmbeddable(hitElement) &&
+      !isCustomRenderableEmbeddable(hitElement) &&
       (this.state.viewModeEnabled ||
         this.state.activeTool.type === "laser" ||
         this.isIframeLikeElementCenter(
@@ -1360,7 +1381,7 @@ class App extends React.Component<AppProps, AppState> {
         300 &&
       gesture.pointers.size < 2 &&
       isIframeLikeElement(hitElement) &&
-      !isMathFormulaEmbeddable(hitElement) &&
+      !isCustomRenderableEmbeddable(hitElement) &&
       (this.state.viewModeEnabled ||
         this.state.activeTool.type === "laser" ||
         this.isIframeLikeElementCenter(
@@ -1377,7 +1398,7 @@ class App extends React.Component<AppProps, AppState> {
     const iframeLikeElement =
       hitElement as NonDeleted<ExcalidrawIframeLikeElement>;
 
-    if (isMathFormulaEmbeddable(iframeLikeElement)) {
+    if (isCustomRenderableEmbeddable(iframeLikeElement)) {
       return false;
     }
 
@@ -1501,7 +1522,7 @@ class App extends React.Component<AppProps, AppState> {
     this.scene.getNonDeletedElements().filter((element) => {
       if (isEmbeddableElement(element)) {
         iframeLikes.add(element.id);
-        if (isMathFormulaEmbeddable(element)) {
+        if (isCustomRenderableEmbeddable(element)) {
           if (this.embedsValidationStatus.get(element.id) !== true) {
             updated = true;
             this.updateEmbedValidationStatus(element, true);
@@ -1544,7 +1565,7 @@ class App extends React.Component<AppProps, AppState> {
       .filter(
         (el): el is Ordered<NonDeleted<ExcalidrawIframeLikeElement>> =>
           (isEmbeddableElement(el) &&
-            (isMathFormulaEmbeddable(el) ||
+            (isCustomRenderableEmbeddable(el) ||
               this.embedsValidationStatus.get(el.id) === true)) ||
           isIframeElement(el),
       );
@@ -1712,7 +1733,7 @@ class App extends React.Component<AppProps, AppState> {
                 },
               } as const;
             }
-          } else if (isMathFormulaEmbeddable(el)) {
+          } else if (isCustomRenderableEmbeddable(el)) {
             src = null;
           } else {
             src = getEmbedLink(toValidURL(el.link || ""));
@@ -1727,13 +1748,15 @@ class App extends React.Component<AppProps, AppState> {
           const customData = el.customData as
             | {
                 formulaType?: string;
+                codeBlockType?: string;
               }
             | undefined;
           const shouldShowInteractionHint =
             isHovered &&
             !(
               el.link?.startsWith("math://formula/") ||
-              customData?.formulaType === "math"
+              customData?.formulaType === "math" ||
+              customData?.codeBlockType === "code"
             );
 
           return (
@@ -1741,6 +1764,7 @@ class App extends React.Component<AppProps, AppState> {
               key={el.id}
               className={clsx("excalidraw__embeddable-container", {
                 "is-hovered": isHovered,
+                "is-custom-renderable": isCustomRenderableEmbeddable(el),
               })}
               style={{
                 transform: isVisible
@@ -6331,7 +6355,7 @@ class App extends React.Component<AppProps, AppState> {
 
       if (
         isIframeLikeElement(hitElement) &&
-        !isMathFormulaEmbeddable(hitElement)
+        !isCustomRenderableEmbeddable(hitElement)
       ) {
         this.setState({
           activeEmbeddable: { element: hitElement, state: "active" },
@@ -7041,7 +7065,7 @@ class App extends React.Component<AppProps, AppState> {
       if (
         hitElement &&
         (hitElement.link || isEmbeddableElement(hitElement)) &&
-        !isMathFormulaEmbeddable(hitElement) &&
+        !isCustomRenderableEmbeddable(hitElement) &&
         this.state.selectedElementIds[hitElement.id] &&
         !this.state.contextMenu &&
         !this.state.showHyperlinkPopup
@@ -7633,7 +7657,7 @@ class App extends React.Component<AppProps, AppState> {
             ),
             showHyperlinkPopup:
               (hitElement.link || isEmbeddableElement(hitElement)) &&
-              !isMathFormulaEmbeddable(hitElement)
+              !isCustomRenderableEmbeddable(hitElement)
                 ? "info"
                 : false,
           };
@@ -8492,7 +8516,7 @@ class App extends React.Component<AppProps, AppState> {
                   ),
                   showHyperlinkPopup:
                     (hitElement.link || isEmbeddableElement(hitElement)) &&
-                    !isMathFormulaEmbeddable(hitElement)
+                    !isCustomRenderableEmbeddable(hitElement)
                       ? "info"
                       : false,
                 };
@@ -10116,7 +10140,7 @@ class App extends React.Component<AppProps, AppState> {
                 elementsWithinSelection.length === 1 &&
                 (elementsWithinSelection[0].link ||
                   isEmbeddableElement(elementsWithinSelection[0])) &&
-                !isMathFormulaEmbeddable(elementsWithinSelection[0])
+                !isCustomRenderableEmbeddable(elementsWithinSelection[0])
                   ? "info"
                   : false,
             };
@@ -10966,7 +10990,7 @@ class App extends React.Component<AppProps, AppState> {
                 ),
                 showHyperlinkPopup:
                   (hitElement.link || isEmbeddableElement(hitElement)) &&
-                  !isMathFormulaEmbeddable(hitElement)
+                  !isCustomRenderableEmbeddable(hitElement)
                     ? "info"
                     : false,
               };

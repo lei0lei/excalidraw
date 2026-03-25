@@ -30,6 +30,7 @@ import {
   cacheExcalidrawThumbnail,
   createExcalidrawThumbnailUrl,
   getCachedExcalidrawThumbnail,
+  getLatestCachedExcalidrawThumbnailForFile,
 } from "./data/thumbnail";
 
 import type { ReactNode } from "react";
@@ -96,8 +97,14 @@ type BuildWorkspaceTreeRowsParams = {
 
 type WorkspaceThumbnailState = {
   cacheKey: string;
-  status: "loading" | "ready" | "empty" | "error";
+  status: "pending" | "loading" | "ready" | "empty" | "error";
   svg: string | null;
+};
+
+type CachedFolderContents = {
+  folders: WorkspaceFolderNode[];
+  files: WorkspaceFileNode[];
+  loadedAt: number;
 };
 
 type WorkspaceNotice = {
@@ -110,7 +117,6 @@ type WorkspaceFileCardProps = {
   isSelected: boolean;
   thumbnail?: WorkspaceThumbnailState;
   openingFileId: string | null;
-  onVisibilityChange: (fileId: string, isVisible: boolean) => void;
   onSelectFile: (file: WorkspaceFileNode) => void;
   onOpenFile: (file: WorkspaceFileNode) => Promise<void>;
 };
@@ -152,6 +158,22 @@ type WorkspaceTreeRowProps = {
   rootActions?: ReactNode;
 };
 
+type WorkspacePreviewFolderItem = {
+  key: string;
+  kind: "folder";
+  folder: WorkspaceFolderNode;
+};
+
+type WorkspacePreviewFileItem = {
+  key: string;
+  kind: "file";
+  file: WorkspaceFileNode;
+};
+
+type WorkspacePreviewItem =
+  | WorkspacePreviewFolderItem
+  | WorkspacePreviewFileItem;
+
 const BACKENDS = [
   { id: "google-drive", title: "Google Drive" },
   { id: "local", title: "Local directory" },
@@ -162,12 +184,17 @@ const naturalNameCollator = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: "base",
 });
-const INITIAL_THUMBNAIL_BATCH_SIZE = 8;
-const MAX_THUMBNAIL_RENDER_CONCURRENCY = 3;
+const INITIAL_THUMBNAIL_BATCH_SIZE = 12;
+const MAX_THUMBNAIL_RENDER_CONCURRENCY = 1;
 const WORKSPACE_TREE_ROW_HEIGHT = 32;
 const WORKSPACE_TREE_OVERSCAN = 8;
 const THUMBNAIL_MAX_RETRY_COUNT = 1;
 const THUMBNAIL_RETRY_DELAY_MS = 1200;
+const WORKSPACE_PREVIEW_CARD_MIN_WIDTH = 224;
+const WORKSPACE_PREVIEW_CARD_HEIGHT = 248;
+const WORKSPACE_PREVIEW_GRID_GAP = 16;
+const WORKSPACE_PREVIEW_OVERSCAN_ROWS = 2;
+const MAX_FOLDER_LOAD_CONCURRENCY = 2;
 
 const getStoredWorkspaceBackend = (): BackendId => {
   if (typeof window === "undefined") {
@@ -334,6 +361,39 @@ const collectFolderSubtreeIds = (
   }
 
   return folderIds;
+};
+
+const createTaskLimiter = (limit: number) => {
+  let activeCount = 0;
+  const queue: Array<() => void> = [];
+
+  const runNext = () => {
+    if (activeCount >= limit) {
+      return;
+    }
+
+    const next = queue.shift();
+    if (!next) {
+      return;
+    }
+
+    activeCount += 1;
+    next();
+  };
+
+  return async <T,>(task: () => Promise<T>): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      queue.push(() => {
+        void task()
+          .then(resolve, reject)
+          .finally(() => {
+            activeCount = Math.max(0, activeCount - 1);
+            runNext();
+          });
+      });
+
+      runNext();
+    });
 };
 
 const WorkspaceChevronIcon = ({ expanded }: { expanded: boolean }) => (
@@ -548,48 +608,21 @@ const WorkspaceFileCard = ({
   isSelected,
   thumbnail,
   openingFileId,
-  onVisibilityChange,
   onSelectFile,
   onOpenFile,
 }: WorkspaceFileCardProps) => {
-  const cardRef = useRef<HTMLDivElement | null>(null);
   const resolvedThumbnail = thumbnail ?? {
     cacheKey: getThumbnailCacheKey(file),
-    status: "loading" as const,
+    status: "pending" as const,
     svg: null,
   };
-
-  useEffect(() => {
-    const node = cardRef.current;
-
-    if (!node || typeof IntersectionObserver === "undefined") {
-      onVisibilityChange(file.id, true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          onVisibilityChange(file.id, entry.isIntersecting);
-        });
-      },
-      {
-        rootMargin: "240px 0px",
-        threshold: 0.01,
-      },
-    );
-
-    observer.observe(node);
-
-    return () => {
-      observer.disconnect();
-      onVisibilityChange(file.id, false);
-    };
-  }, [file.id, onVisibilityChange]);
+  const shouldShowPreviewSkeleton =
+    !resolvedThumbnail.svg &&
+    (resolvedThumbnail.status === "pending" ||
+      resolvedThumbnail.status === "loading");
 
   return (
     <div
-      ref={cardRef}
       className={`workspace-file-card ${
         isSelected ? "workspace-file-card--selected" : ""
       }`}
@@ -615,17 +648,28 @@ const WorkspaceFileCard = ({
         }}
       >
         <div className="workspace-file-card__preview">
-          {resolvedThumbnail.status === "ready" && resolvedThumbnail.svg ? (
+          {resolvedThumbnail.svg ? (
             <div
               className="workspace-file-card__preview-svg"
               aria-label={`${file.name} preview`}
               dangerouslySetInnerHTML={{ __html: resolvedThumbnail.svg }}
             />
+          ) : shouldShowPreviewSkeleton ? (
+            <div
+              className={`workspace-file-card__preview-skeleton ${
+                resolvedThumbnail.status === "loading"
+                  ? "workspace-file-card__preview-skeleton--loading"
+                  : ""
+              }`}
+              aria-label={`${file.name} preview pending`}
+            >
+              <span className="workspace-file-card__preview-skeleton-box" />
+              <span className="workspace-file-card__preview-skeleton-line workspace-file-card__preview-skeleton-line--short" />
+              <span className="workspace-file-card__preview-skeleton-line" />
+            </div>
           ) : (
             <span className="workspace-file-card__preview-label">
-              {resolvedThumbnail.status === "loading"
-                ? "Loading preview..."
-                : resolvedThumbnail.status === "empty"
+              {resolvedThumbnail.status === "empty"
                 ? "Empty file"
                 : resolvedThumbnail.status === "error"
                 ? "Preview unavailable"
@@ -939,9 +983,6 @@ export const WorkspacePage = ({
   const [thumbnailsByFileId, setThumbnailsByFileId] = useState<
     Record<string, WorkspaceThumbnailState>
   >({});
-  const [visibleThumbnailFileIds, setVisibleThumbnailFileIds] = useState<
-    Set<string>
-  >(new Set());
   const [floatingNotice, setFloatingNotice] = useState<WorkspaceNotice | null>(
     null,
   );
@@ -954,6 +995,14 @@ export const WorkspacePage = ({
   const treeScrollRef = useRef<HTMLDivElement | null>(null);
   const [treeScrollTop, setTreeScrollTop] = useState(0);
   const [treeViewportHeight, setTreeViewportHeight] = useState(0);
+  const previewScrollRef = useRef<HTMLDivElement | null>(null);
+  const [previewScrollTop, setPreviewScrollTop] = useState(0);
+  const [previewViewportHeight, setPreviewViewportHeight] = useState(0);
+  const [previewViewportWidth, setPreviewViewportWidth] = useState(0);
+  const folderCacheRef = useRef<Record<string, CachedFolderContents>>({});
+  const folderRequestLimiterRef = useRef(
+    createTaskLimiter(MAX_FOLDER_LOAD_CONCURRENCY),
+  );
 
   const missingEnvVars = useMemo(() => getMissingGoogleDriveEnvVars(), []);
   const isLocalSupported = useMemo(() => isLocalDirectoryAccessSupported(), []);
@@ -1007,10 +1056,11 @@ export const WorkspacePage = ({
       );
       setTreeScrollTop(0);
       treeScrollRef.current?.scrollTo({ top: 0 });
+      setPreviewScrollTop(0);
+      previewScrollRef.current?.scrollTo({ top: 0 });
       setOpeningFolderId(null);
       setOpeningFileId(null);
       setThumbnailsByFileId({});
-      setVisibleThumbnailFileIds(new Set());
     },
     [clearAllThumbnailRetries],
   );
@@ -1053,6 +1103,33 @@ export const WorkspacePage = ({
       observer.disconnect();
     };
   }, [rootFolder]);
+
+  useEffect(() => {
+    const node = previewScrollRef.current;
+    if (!node) {
+      return;
+    }
+
+    const syncViewport = () => {
+      setPreviewViewportHeight(node.clientHeight);
+      setPreviewViewportWidth(node.clientWidth);
+    };
+
+    syncViewport();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      syncViewport();
+    });
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [rootFolder, selectedFolderId]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -1124,59 +1201,98 @@ export const WorkspacePage = ({
     };
   }, [resetWorkspaceState, selectedBackend]);
 
-  const loadFolder = useCallback(async (folder: WorkspaceFolderNode) => {
-    setLoadingFolderIds((prev) => {
-      const next = new Set(prev);
-      next.add(folder.id);
-      return next;
-    });
-
-    try {
-      let folders: WorkspaceFolderNode[] = [];
-      let files: WorkspaceFileNode[] = [];
-
-      if (folder.provider === "google-drive") {
-        const result = await listGoogleDriveFolderChildren(folder.rawId);
-        folders = result.folders.map((childFolder) =>
-          toGoogleFolderNode(childFolder, folder.rawId),
-        );
-        files = result.files.map((file) => toGoogleFileNode(file));
-        setIsDriveConnected(true);
-      } else {
-        const result = await listLocalFolderChildren(
-          folder.data as LocalDirectoryFolder,
-        );
-        folders = result.folders.map((childFolder) =>
-          toLocalFolderNode(childFolder),
-        );
-        files = result.files.map((file) => toLocalFileNode(file));
-      }
+  const applyFolderContents = useCallback(
+    (
+      folder: WorkspaceFolderNode,
+      contents: {
+        folders: WorkspaceFolderNode[];
+        files: WorkspaceFileNode[];
+      },
+    ) => {
+      const nextFolders = sortFoldersByName(contents.folders);
+      const nextFiles = sortFilesByName(contents.files);
 
       setFolderChildrenByParent((prev) => ({
         ...prev,
-        [folder.id]: sortFoldersByName(folders),
+        [folder.id]: nextFolders,
       }));
       setFilesByFolderId((prev) => ({
         ...prev,
-        [folder.id]: sortFilesByName(files),
+        [folder.id]: nextFiles,
       }));
       setFolderParentById((prev) => {
-        const next = { ...prev };
+        const next = {
+          ...prev,
+          [folder.id]: prev[folder.id] ?? folder.parentId,
+        };
 
-        for (const childFolder of folders) {
+        for (const childFolder of nextFolders) {
           next[childFolder.id] = folder.id;
         }
 
         return next;
       });
-    } finally {
+      folderCacheRef.current[folder.id] = {
+        folders: nextFolders,
+        files: nextFiles,
+        loadedAt: Date.now(),
+      };
+    },
+    [],
+  );
+
+  const loadFolder = useCallback(
+    async (folder: WorkspaceFolderNode, opts?: { force?: boolean }) => {
+      if (!opts?.force) {
+        const cachedContents = folderCacheRef.current[folder.id];
+        if (cachedContents) {
+          applyFolderContents(folder, cachedContents);
+          return;
+        }
+      }
+
       setLoadingFolderIds((prev) => {
         const next = new Set(prev);
-        next.delete(folder.id);
+        next.add(folder.id);
         return next;
       });
-    }
-  }, []);
+
+      try {
+        const contents = await folderRequestLimiterRef.current(async () => {
+          if (folder.provider === "google-drive") {
+            const result = await listGoogleDriveFolderChildren(folder.rawId);
+            setIsDriveConnected(true);
+
+            return {
+              folders: result.folders.map((childFolder) =>
+                toGoogleFolderNode(childFolder, folder.rawId),
+              ),
+              files: result.files.map((file) => toGoogleFileNode(file)),
+            };
+          }
+
+          const result = await listLocalFolderChildren(
+            folder.data as LocalDirectoryFolder,
+          );
+          return {
+            folders: result.folders.map((childFolder) =>
+              toLocalFolderNode(childFolder),
+            ),
+            files: result.files.map((file) => toLocalFileNode(file)),
+          };
+        });
+
+        applyFolderContents(folder, contents);
+      } finally {
+        setLoadingFolderIds((prev) => {
+          const next = new Set(prev);
+          next.delete(folder.id);
+          return next;
+        });
+      }
+    },
+    [applyFolderContents],
+  );
 
   useEffect(() => {
     if (!rootFolder) {
@@ -1401,6 +1517,21 @@ export const WorkspacePage = ({
       });
       setSelectedFolderId(createdFolder.id);
       setSelectedFileId(null);
+      folderCacheRef.current[targetFolder.id] = {
+        folders: sortFoldersByName([
+          ...(folderCacheRef.current[targetFolder.id]?.folders ?? []),
+          createdFolder,
+        ]),
+        files: sortFilesByName(
+          folderCacheRef.current[targetFolder.id]?.files ?? [],
+        ),
+        loadedAt: Date.now(),
+      };
+      folderCacheRef.current[createdFolder.id] = {
+        folders: [],
+        files: [],
+        loadedAt: Date.now(),
+      };
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to create folder.",
@@ -1462,6 +1593,16 @@ export const WorkspacePage = ({
       });
       setSelectedFolderId(targetFolder.id);
       setSelectedFileId(createdFile.id);
+      folderCacheRef.current[targetFolder.id] = {
+        folders: sortFoldersByName(
+          folderCacheRef.current[targetFolder.id]?.folders ?? [],
+        ),
+        files: sortFilesByName([
+          ...(folderCacheRef.current[targetFolder.id]?.files ?? []),
+          createdFile,
+        ]),
+        loadedAt: Date.now(),
+      };
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to create file.",
@@ -1527,6 +1668,18 @@ export const WorkspacePage = ({
             ),
           ),
         }));
+        folderCacheRef.current[selectedFile.parentId] = {
+          folders: sortFoldersByName(
+            folderCacheRef.current[selectedFile.parentId]?.folders ?? [],
+          ),
+          files: sortFilesByName(
+            (folderCacheRef.current[selectedFile.parentId]?.files ?? []).map(
+              (file) =>
+                file.id === selectedFile.id ? resolvedRenamedFile : file,
+            ),
+          ),
+          loadedAt: Date.now(),
+        };
       }
       setSelectedFileId(resolvedRenamedFile.id);
 
@@ -1612,6 +1765,26 @@ export const WorkspacePage = ({
             ),
           ),
         }));
+        folderCacheRef.current[parentId] = {
+          folders: sortFoldersByName(
+            (folderCacheRef.current[parentId]?.folders ?? []).map((folder) =>
+              folder.id === selectedFolder.id
+                ? {
+                    ...folder,
+                    name: renamed.name,
+                    modifiedTime: renamed.modifiedTime,
+                    data: {
+                      ...(folder.data as GoogleDriveFolder),
+                      name: renamed.name,
+                      modifiedTime: renamed.modifiedTime,
+                    },
+                  }
+                : folder,
+            ),
+          ),
+          files: sortFilesByName(folderCacheRef.current[parentId]?.files ?? []),
+          loadedAt: Date.now(),
+        };
         return;
       }
 
@@ -1669,6 +1842,18 @@ export const WorkspacePage = ({
       });
       setSelectedFolderId(renamedFolder.id);
       setSelectedFileId(null);
+      subtreeFolderIds.forEach((folderId) => {
+        delete folderCacheRef.current[folderId];
+      });
+      folderCacheRef.current[parentId] = {
+        folders: sortFoldersByName(
+          (folderCacheRef.current[parentId]?.folders ?? []).map((folder) =>
+            folder.id === selectedFolder.id ? renamedFolder : folder,
+          ),
+        ),
+        files: sortFilesByName(folderCacheRef.current[parentId]?.files ?? []),
+        loadedAt: Date.now(),
+      };
       await loadFolder(renamedFolder);
     } catch (error) {
       setErrorMessage(
@@ -1722,6 +1907,17 @@ export const WorkspacePage = ({
               prev[selectedFile.parentId as string] ?? []
             ).filter((file) => file.id !== selectedFile.id),
           }));
+          folderCacheRef.current[selectedFile.parentId] = {
+            folders: sortFoldersByName(
+              folderCacheRef.current[selectedFile.parentId]?.folders ?? [],
+            ),
+            files: sortFilesByName(
+              (
+                folderCacheRef.current[selectedFile.parentId]?.files ?? []
+              ).filter((file) => file.id !== selectedFile.id),
+            ),
+            loadedAt: Date.now(),
+          };
         }
 
         setThumbnailsByFileId((prev) => {
@@ -1731,11 +1927,6 @@ export const WorkspacePage = ({
         });
         delete activeThumbnailLoadKeysRef.current[selectedFile.id];
         clearThumbnailRetry(selectedFile.id);
-        setVisibleThumbnailFileIds((prev) => {
-          const next = new Set(prev);
-          next.delete(selectedFile.id);
-          return next;
-        });
         setSelectedFileId(null);
       } catch (error) {
         setErrorMessage(
@@ -1826,15 +2017,18 @@ export const WorkspacePage = ({
 
         return next;
       });
-      setVisibleThumbnailFileIds((prev) => {
-        const next = new Set(prev);
-
-        removedFileIds.forEach((fileId) => {
-          next.delete(fileId);
-        });
-
-        return next;
+      subtreeFolderIds.forEach((folderId) => {
+        delete folderCacheRef.current[folderId];
       });
+      folderCacheRef.current[parentId] = {
+        folders: sortFoldersByName(
+          (folderCacheRef.current[parentId]?.folders ?? []).filter(
+            (folder) => folder.id !== selectedFolder.id,
+          ),
+        ),
+        files: sortFilesByName(folderCacheRef.current[parentId]?.files ?? []),
+        loadedAt: Date.now(),
+      };
       setSelectedFolderId(parentId);
       setSelectedFileId(null);
     } catch (error) {
@@ -1869,6 +2063,20 @@ export const WorkspacePage = ({
   const currentExcalidrawFiles = useMemo(() => {
     return currentFolderFiles.filter((file) => file.isExcalidrawFile);
   }, [currentFolderFiles]);
+  const previewItems = useMemo<WorkspacePreviewItem[]>(() => {
+    return [
+      ...currentChildFolders.map((folder) => ({
+        key: `folder:${folder.id}`,
+        kind: "folder" as const,
+        folder,
+      })),
+      ...currentExcalidrawFiles.map((file) => ({
+        key: `file:${file.id}`,
+        kind: "file" as const,
+        file,
+      })),
+    ];
+  }, [currentChildFolders, currentExcalidrawFiles]);
   const treeRows = useMemo(() => {
     if (!rootFolder) {
       return [];
@@ -1906,6 +2114,68 @@ export const WorkspacePage = ({
     ) + WORKSPACE_TREE_OVERSCAN,
   );
   const visibleTreeRows = treeRows.slice(treeStartIndex, treeEndIndex);
+  const previewColumnCount = Math.max(
+    1,
+    Math.floor(
+      (previewViewportWidth + WORKSPACE_PREVIEW_GRID_GAP) /
+        (WORKSPACE_PREVIEW_CARD_MIN_WIDTH + WORKSPACE_PREVIEW_GRID_GAP),
+    ),
+  );
+  const previewRowCount = Math.ceil(previewItems.length / previewColumnCount);
+  const previewRowHeight =
+    WORKSPACE_PREVIEW_CARD_HEIGHT + WORKSPACE_PREVIEW_GRID_GAP;
+  const previewStartRow = Math.max(
+    0,
+    Math.floor(previewScrollTop / Math.max(previewRowHeight, 1)) -
+      WORKSPACE_PREVIEW_OVERSCAN_ROWS,
+  );
+  const previewEndRow = Math.min(
+    previewRowCount,
+    Math.ceil(
+      (previewScrollTop +
+        Math.max(previewViewportHeight, WORKSPACE_PREVIEW_CARD_HEIGHT)) /
+        Math.max(previewRowHeight, 1),
+    ) + WORKSPACE_PREVIEW_OVERSCAN_ROWS,
+  );
+  const previewVisibleItems = previewItems.slice(
+    previewStartRow * previewColumnCount,
+    previewEndRow * previewColumnCount,
+  );
+  const visibleThumbnailFileIdList = useMemo(() => {
+    const next = new Set<string>();
+
+    previewItems
+      .slice(
+        previewStartRow * previewColumnCount,
+        previewEndRow * previewColumnCount,
+      )
+      .forEach((item) => {
+        if (item.kind === "file") {
+          next.add(item.file.id);
+        }
+      });
+
+    if (selectedFileId) {
+      next.add(selectedFileId);
+    }
+
+    currentExcalidrawFiles
+      .slice(0, INITIAL_THUMBNAIL_BATCH_SIZE)
+      .forEach((file) => next.add(file.id));
+
+    return [...next];
+  }, [
+    currentExcalidrawFiles,
+    previewColumnCount,
+    previewEndRow,
+    previewItems,
+    previewStartRow,
+    selectedFileId,
+  ]);
+  const visibleThumbnailFileIds = useMemo(
+    () => new Set(visibleThumbnailFileIdList),
+    [visibleThumbnailFileIdList],
+  );
 
   const handleOpenWorkspaceFile = useCallback(
     async (file: WorkspaceFileNode) => {
@@ -1958,6 +2228,11 @@ export const WorkspacePage = ({
     [handleSelectFolder],
   );
 
+  useEffect(() => {
+    setPreviewScrollTop(0);
+    previewScrollRef.current?.scrollTo({ top: 0 });
+  }, [selectedFolderId]);
+
   const handleRenameAction = useCallback(() => {
     if (selectedFile) {
       void handleRenameFile();
@@ -1982,56 +2257,35 @@ export const WorkspacePage = ({
     thumbnailsByFileIdRef.current = thumbnailsByFileId;
   }, [thumbnailsByFileId]);
 
-  const setThumbnailVisibility = useCallback(
-    (fileId: string, isVisible: boolean) => {
-      setVisibleThumbnailFileIds((prev) => {
-        const alreadyVisible = prev.has(fileId);
+  useEffect(() => {
+    const prioritizedFileMap = new Map<string, WorkspaceFileNode>();
 
-        if (alreadyVisible === isVisible) {
-          return prev;
-        }
-
-        const next = new Set(prev);
-        if (isVisible) {
-          next.add(fileId);
-        } else {
-          next.delete(fileId);
-        }
-        return next;
+    currentExcalidrawFiles
+      .filter((file) => file.id === selectedFileId)
+      .forEach((file) => {
+        prioritizedFileMap.set(file.id, file);
       });
-    },
-    [],
-  );
 
-  useEffect(() => {
-    setVisibleThumbnailFileIds(() => {
-      const next = new Set<string>();
-
-      currentExcalidrawFiles
-        .slice(0, INITIAL_THUMBNAIL_BATCH_SIZE)
-        .forEach((file) => next.add(file.id));
-      if (selectedFileId) {
-        next.add(selectedFileId);
-      }
-
-      return next;
-    });
-  }, [currentExcalidrawFiles, selectedFileId]);
-
-  useEffect(() => {
-    const prioritizedFiles = [
-      ...currentExcalidrawFiles.filter((file) => file.id === selectedFileId),
-      ...currentExcalidrawFiles.filter(
+    currentExcalidrawFiles
+      .filter(
         (file) =>
           file.id !== selectedFileId && visibleThumbnailFileIds.has(file.id),
-      ),
-      ...currentExcalidrawFiles
-        .slice(0, INITIAL_THUMBNAIL_BATCH_SIZE)
-        .filter(
-          (file) =>
-            file.id !== selectedFileId && !visibleThumbnailFileIds.has(file.id),
-        ),
-    ];
+      )
+      .forEach((file) => {
+        prioritizedFileMap.set(file.id, file);
+      });
+
+    currentExcalidrawFiles
+      .slice(0, INITIAL_THUMBNAIL_BATCH_SIZE)
+      .filter(
+        (file) =>
+          file.id !== selectedFileId && !visibleThumbnailFileIds.has(file.id),
+      )
+      .forEach((file) => {
+        prioritizedFileMap.set(file.id, file);
+      });
+
+    const prioritizedFiles = [...prioritizedFileMap.values()];
 
     if (!prioritizedFiles.length) {
       return;
@@ -2102,6 +2356,31 @@ export const WorkspacePage = ({
           return;
         }
 
+        const staleThumbnail = await getLatestCachedExcalidrawThumbnailForFile(
+          file.id,
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        if (staleThumbnail?.svg) {
+          setThumbnailsByFileId((prev) => {
+            if (prev[file.id]?.cacheKey !== cacheKey) {
+              return prev;
+            }
+
+            return {
+              ...prev,
+              [file.id]: {
+                cacheKey,
+                status: "loading",
+                svg: staleThumbnail.svg,
+              },
+            };
+          });
+        }
+
         const sourceFile = await loadThumbnailSourceFile(file);
         const thumbnailSvg = await createExcalidrawThumbnailUrl(sourceFile);
 
@@ -2143,7 +2422,7 @@ export const WorkspacePage = ({
           const timeoutId = window.setTimeout(() => {
             delete thumbnailRetryTimeoutsRef.current[file.id];
             delete activeThumbnailLoadKeysRef.current[file.id];
-            setVisibleThumbnailFileIds((prev) => new Set(prev));
+            setThumbnailsByFileId((prev) => ({ ...prev }));
           }, THUMBNAIL_RETRY_DELAY_MS);
           thumbnailRetryTimeoutsRef.current[file.id] = timeoutId;
         }
@@ -2181,6 +2460,9 @@ export const WorkspacePage = ({
         }
 
         await loadThumbnailForFile(file);
+        await new Promise<void>((resolve) => {
+          window.requestAnimationFrame(() => resolve());
+        });
       }
     });
 
@@ -2194,6 +2476,7 @@ export const WorkspacePage = ({
     currentExcalidrawFiles,
     loadThumbnailSourceFile,
     selectedFileId,
+    visibleThumbnailFileIdList,
     visibleThumbnailFileIds,
   ]);
 
@@ -2400,7 +2683,13 @@ export const WorkspacePage = ({
           </aside>
 
           <section className="workspace-panel workspace-panel--main">
-            <div className="workspace-preview-scroll">
+            <div
+              ref={previewScrollRef}
+              className="workspace-preview-scroll"
+              onScroll={(event) => {
+                setPreviewScrollTop(event.currentTarget.scrollTop);
+              }}
+            >
               {!rootFolder || !selectedFolderId ? (
                 <div className="workspace-placeholder">
                   After selecting a folder, its child folders and Excalidraw
@@ -2412,27 +2701,66 @@ export const WorkspacePage = ({
                 </div>
               ) : currentChildFolders.length > 0 ||
                 currentExcalidrawFiles.length > 0 ? (
-                <div className="workspace-files-grid">
-                  {currentChildFolders.map((folder) => (
-                    <WorkspaceFolderCard
-                      key={folder.id}
-                      folder={folder}
-                      openingFolderId={openingFolderId}
-                      onOpenFolder={handleOpenWorkspaceFolder}
-                    />
-                  ))}
-                  {currentExcalidrawFiles.map((file) => (
-                    <WorkspaceFileCard
-                      key={file.id}
-                      file={file}
-                      isSelected={selectedFileId === file.id}
-                      thumbnail={thumbnailsByFileId[file.id]}
-                      openingFileId={openingFileId}
-                      onVisibilityChange={setThumbnailVisibility}
-                      onSelectFile={handleSelectFile}
-                      onOpenFile={handleOpenWorkspaceFile}
-                    />
-                  ))}
+                <div
+                  className="workspace-files-grid workspace-files-grid--virtual"
+                  style={{
+                    gridTemplateColumns: `repeat(${previewColumnCount}, minmax(0, 1fr))`,
+                  }}
+                >
+                  <div
+                    className="workspace-files-grid__spacer"
+                    style={{
+                      height: `${Math.max(
+                        previewRowCount * previewRowHeight -
+                          WORKSPACE_PREVIEW_GRID_GAP,
+                        0,
+                      )}px`,
+                    }}
+                  >
+                    {previewVisibleItems.map((item, index) => {
+                      const itemIndex =
+                        previewStartRow * previewColumnCount + index;
+                      const rowIndex = Math.floor(
+                        itemIndex / previewColumnCount,
+                      );
+                      const columnIndex = itemIndex % previewColumnCount;
+
+                      return (
+                        <div
+                          key={item.key}
+                          className="workspace-files-grid__item"
+                          style={{
+                            top: `${rowIndex * previewRowHeight}px`,
+                            left: `calc(${columnIndex} * ((100% - ${
+                              (previewColumnCount - 1) *
+                              WORKSPACE_PREVIEW_GRID_GAP
+                            }px) / ${previewColumnCount} + ${WORKSPACE_PREVIEW_GRID_GAP}px))`,
+                            width: `calc((100% - ${
+                              (previewColumnCount - 1) *
+                              WORKSPACE_PREVIEW_GRID_GAP
+                            }px) / ${previewColumnCount})`,
+                          }}
+                        >
+                          {item.kind === "folder" ? (
+                            <WorkspaceFolderCard
+                              folder={item.folder}
+                              openingFolderId={openingFolderId}
+                              onOpenFolder={handleOpenWorkspaceFolder}
+                            />
+                          ) : (
+                            <WorkspaceFileCard
+                              file={item.file}
+                              isSelected={selectedFileId === item.file.id}
+                              thumbnail={thumbnailsByFileId[item.file.id]}
+                              openingFileId={openingFileId}
+                              onSelectFile={handleSelectFile}
+                              onOpenFile={handleOpenWorkspaceFile}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
                 <div className="workspace-placeholder">

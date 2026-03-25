@@ -67,6 +67,7 @@ import { Tooltip } from "./Tooltip";
 import DropdownMenu from "./dropdownMenu/DropdownMenu";
 import { PropertiesPopover } from "./PropertiesPopover";
 import {
+  codeIcon,
   EmbedIcon,
   extraToolsIcon,
   frameToolIcon,
@@ -112,6 +113,8 @@ const mathFormulaToolIcon = (
     />
   </svg>
 );
+
+const codeBlockToolIcon = codeIcon;
 
 export const canChangeStrokeColor = (
   appState: UIAppState,
@@ -1089,6 +1092,8 @@ export const ShapesSwitcher = ({
   const embeddableToolSelected = activeTool.type === "embeddable";
   const mathFormulaToolSelected =
     activeTool.type === "custom" && activeTool.customType === "math-formula";
+  const codeBlockToolSelected =
+    activeTool.type === "custom" && activeTool.customType === "code-block";
 
   const { TTDDialogTriggerTunnel } = useTunnels();
 
@@ -1221,6 +1226,8 @@ export const ShapesSwitcher = ({
             ? EmbedIcon
             : mathFormulaToolSelected
             ? mathFormulaToolIcon
+            : codeBlockToolSelected
+            ? codeBlockToolIcon
             : laserToolSelected && !app.props.isCollaborating
             ? laserPointerToolIcon
             : lassoToolSelected
@@ -1258,6 +1265,16 @@ export const ShapesSwitcher = ({
             selected={mathFormulaToolSelected}
           >
             Math formula
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() =>
+              app.setActiveTool({ type: "custom", customType: "code-block" })
+            }
+            icon={codeBlockToolIcon}
+            data-testid="toolbar-code-block"
+            selected={codeBlockToolSelected}
+          >
+            Code block
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}

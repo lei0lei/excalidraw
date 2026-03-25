@@ -143,6 +143,39 @@
   }
 }
 
+.cloud-save-indicator {
+  display: flex;
+  align-items: center;
+  height: var(--lg-button-size);
+  padding: 0 0.75rem;
+  border-radius: var(--border-radius-lg);
+  background: var(--color-surface-low);
+  color: var(--color-on-surface);
+  font-family: var(--ui-font);
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--color-surface-lowest);
+  white-space: nowrap;
+}
+
+.cloud-save-indicator--saved {
+  color: #1d7a43;
+}
+
+.cloud-save-indicator--unsaved,
+.cloud-save-indicator--idle {
+  color: #8a6500;
+}
+
+.cloud-save-indicator--saving {
+  color: var(--color-primary);
+}
+
+.cloud-save-indicator--error,
+.cloud-save-indicator--conflict {
+  color: #c92a2a;
+}
+
 .cloud-save-button--secondary {
   background: var(--color-surface-low);
   color: var(--button-color, var(--color-on-surface));
@@ -805,6 +838,20 @@
   gap: 1rem;
 }
 
+.workspace-files-grid--virtual {
+  position: relative;
+  display: block;
+}
+
+.workspace-files-grid__spacer {
+  position: relative;
+  width: 100%;
+}
+
+.workspace-files-grid__item {
+  position: absolute;
+}
+
 .workspace-panel--main {
   display: flex;
   flex-direction: column;
@@ -823,6 +870,7 @@
 .workspace-file-card {
   position: relative;
   overflow: hidden;
+  height: 15.5rem;
   border-radius: 0.875rem;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(98, 94, 224, 0.12);
@@ -954,6 +1002,63 @@
   font-size: 0.9rem;
   text-align: center;
   line-height: 1.4;
+}
+
+.workspace-file-card__preview-skeleton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 10rem;
+  gap: 0.65rem;
+  opacity: 0.92;
+}
+
+.workspace-file-card__preview-skeleton-box,
+.workspace-file-card__preview-skeleton-line {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    rgba(98, 94, 224, 0.08) 0%,
+    rgba(98, 94, 224, 0.16) 50%,
+    rgba(98, 94, 224, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: workspace-preview-shimmer 1.5s ease-in-out infinite;
+}
+
+.workspace-file-card__preview-skeleton-box {
+  width: min(100%, 10rem);
+  height: 6.75rem;
+  border-radius: 0.9rem;
+}
+
+.workspace-file-card__preview-skeleton-line {
+  width: min(100%, 8.5rem);
+  height: 0.55rem;
+  border-radius: 999px;
+}
+
+.workspace-file-card__preview-skeleton-line--short {
+  width: min(100%, 5.5rem);
+}
+
+.workspace-file-card__preview-skeleton--loading
+  .workspace-file-card__preview-skeleton-box,
+.workspace-file-card__preview-skeleton--loading
+  .workspace-file-card__preview-skeleton-line {
+  animation-duration: 1.1s;
+}
+
+@keyframes workspace-preview-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .workspace-file-card__body {
