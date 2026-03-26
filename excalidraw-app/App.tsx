@@ -183,9 +183,10 @@ import {
   createDefaultUmlClassTemplateData,
   createUmlClassTemplate,
   getUmlClassTemplateData,
+  getUmlClassTemplateLayoutSignature,
   getUmlClassTemplateRootId,
-  resolveSelectedUmlClassTemplateRoot,
-  syncUmlClassTemplateLayoutInScene,
+  resolveSelectedUmlClassTemplateRootWithMap,
+  syncUmlClassTemplateLayoutInSceneWithMap,
   updateUmlClassTemplateInScene,
   type UmlClassTemplateData,
   type UmlClassTemplatePreset,
@@ -193,10 +194,11 @@ import {
 import {
   createUmlDiagramTemplate,
   getUmlDiagramTemplateData,
+  getUmlDiagramTemplateLayoutSignature,
   getUmlDiagramTemplateRootId,
   isEditableUmlDiagramTemplatePreset,
-  resolveSelectedUmlDiagramTemplateRoot,
-  syncUmlDiagramTemplateLayoutInScene,
+  resolveSelectedUmlDiagramTemplateRootWithMap,
+  syncUmlDiagramTemplateLayoutInSceneWithMap,
   updateUmlDiagramTemplateInScene,
   type UmlDiagramTemplateData,
   type UmlDiagramTemplatePreset,
@@ -278,6 +280,54 @@ const areUmlDiagramTemplateDataEqual = (
     left.label === right.label &&
     (left.body || "") === (right.body || "")
   );
+};
+
+const getSelectedElementIdsSignature = (
+  selectedElementIds: AppState["selectedElementIds"] | null | undefined,
+) =>
+  Object.keys(selectedElementIds || {})
+    .filter((elementId) => selectedElementIds?.[elementId])
+    .sort()
+    .join("|");
+
+const serializeUmlClassTemplateData = (data: UmlClassTemplateData | null) => {
+  if (!data) {
+    return "";
+  }
+
+  return [
+    data.name,
+    data.stereotype || "",
+    data.attributes.map((item) => item.text).join("\n"),
+    data.methods.map((item) => item.text).join("\n"),
+  ].join("::");
+};
+
+const serializeUmlDiagramTemplateData = (
+  data: UmlDiagramTemplateData | null,
+) => {
+  if (!data) {
+    return "";
+  }
+
+  return [data.preset, data.label, data.body || ""].join("::");
+};
+
+const buildUmlSelectionSignature = (
+  selectedIdsSignature: string,
+  rootId: string | null,
+  dataSignature: string,
+) => [selectedIdsSignature, rootId || "", dataSignature].join("##");
+
+const pruneSignatureCache = (
+  cache: Map<string, string>,
+  elementsById: ReadonlyMap<string, ExcalidrawElement>,
+) => {
+  for (const rootId of cache.keys()) {
+    if (!elementsById.has(rootId)) {
+      cache.delete(rootId);
+    }
+  }
 };
 
 polyfill();
@@ -783,8 +833,16 @@ const ExcalidrawWrapper = () => {
   const templateLibraryDialogOpenRef = useRef(false);
   const selectedUmlClassRootIdRef = useRef<string | null>(null);
   const selectedUmlClassDataRef = useRef<UmlClassTemplateData | null>(null);
+  const umlClassSelectionSignatureRef = useRef("");
+  const umlClassLayoutSignatureCacheRef = useRef<Map<string, string>>(
+    new Map(),
+  );
   const selectedUmlDiagramRootIdRef = useRef<string | null>(null);
   const selectedUmlDiagramDataRef = useRef<UmlDiagramTemplateData | null>(null);
+  const umlDiagramSelectionSignatureRef = useRef("");
+  const umlDiagramLayoutSignatureCacheRef = useRef<Map<string, string>>(
+    new Map(),
+  );
   const umlTemplateRelayoutGuardRef = useRef<{
     rootId: string | null;
     until: number;
@@ -1720,23 +1778,59 @@ const ExcalidrawWrapper = () => {
       excalidrawAPI?.setActiveTool({ type: "selection" });
     }
 
+    const elementsById = new Map<string, ExcalidrawElement>(
+      elements.map((element) => [element.id, element]),
+    );
+    const selectedElementIdsSignature = getSelectedElementIdsSignature(
+      appState.selectedElementIds,
+    );
+    pruneSignatureCache(umlClassLayoutSignatureCacheRef.current, elementsById);
+    pruneSignatureCache(
+      umlDiagramLayoutSignatureCacheRef.current,
+      elementsById,
+    );
+
     try {
-      const selectedUmlRoot = resolveSelectedUmlClassTemplateRoot(
-        elements,
+      const selectedUmlRoot = resolveSelectedUmlClassTemplateRootWithMap(
+        elementsById,
         appState.selectedElementIds,
       );
       if (selectedUmlRoot && excalidrawAPI) {
         const guard = umlTemplateRelayoutGuardRef.current;
         const shouldSkipRelayout =
           guard.rootId === selectedUmlRoot.id && Date.now() < guard.until;
+        const nextLayoutSignature = getUmlClassTemplateLayoutSignature(
+          selectedUmlRoot,
+          elementsById,
+        );
+        const cachedLayoutSignature =
+          umlClassLayoutSignatureCacheRef.current.get(selectedUmlRoot.id);
+        const shouldCheckRelayout =
+          nextLayoutSignature === null ||
+          nextLayoutSignature !== cachedLayoutSignature;
 
-        if (!shouldSkipRelayout) {
-          const relayoutElements = syncUmlClassTemplateLayoutInScene(
+        if (!shouldSkipRelayout && shouldCheckRelayout) {
+          const relayoutElements = syncUmlClassTemplateLayoutInSceneWithMap(
             elements,
             selectedUmlRoot.id,
+            elementsById,
           );
 
           if (relayoutElements !== elements) {
+            const relayoutElementsById = new Map<string, ExcalidrawElement>(
+              relayoutElements.map((element) => [element.id, element]),
+            );
+            const relayoutRoot = relayoutElementsById.get(selectedUmlRoot.id);
+            const relayoutSignature = getUmlClassTemplateLayoutSignature(
+              relayoutRoot,
+              relayoutElementsById,
+            );
+            if (relayoutSignature) {
+              umlClassLayoutSignatureCacheRef.current.set(
+                selectedUmlRoot.id,
+                relayoutSignature,
+              );
+            }
             umlTemplateRelayoutGuardRef.current = {
               rootId: selectedUmlRoot.id,
               until: Date.now() + 200,
@@ -1748,43 +1842,91 @@ const ExcalidrawWrapper = () => {
             return;
           }
         }
+
+        if (nextLayoutSignature) {
+          umlClassLayoutSignatureCacheRef.current.set(
+            selectedUmlRoot.id,
+            nextLayoutSignature,
+          );
+        }
       }
 
       const nextSelectedUmlData = getUmlClassTemplateData(selectedUmlRoot);
       const nextSelectedUmlRootId = selectedUmlRoot?.id || null;
-
-      if (selectedUmlClassRootIdRef.current !== nextSelectedUmlRootId) {
-        selectedUmlClassRootIdRef.current = nextSelectedUmlRootId;
-        setSelectedUmlClassRootId(nextSelectedUmlRootId);
-      }
+      const nextUmlClassSelectionSignature = buildUmlSelectionSignature(
+        selectedElementIdsSignature,
+        nextSelectedUmlRootId,
+        serializeUmlClassTemplateData(nextSelectedUmlData),
+      );
 
       if (
-        !areUmlClassTemplateDataEqual(
-          selectedUmlClassDataRef.current,
-          nextSelectedUmlData,
-        )
+        umlClassSelectionSignatureRef.current !== nextUmlClassSelectionSignature
       ) {
-        selectedUmlClassDataRef.current = nextSelectedUmlData;
-        setSelectedUmlClassData(nextSelectedUmlData);
+        umlClassSelectionSignatureRef.current = nextUmlClassSelectionSignature;
+
+        if (selectedUmlClassRootIdRef.current !== nextSelectedUmlRootId) {
+          selectedUmlClassRootIdRef.current = nextSelectedUmlRootId;
+          setSelectedUmlClassRootId(nextSelectedUmlRootId);
+        }
+
+        if (
+          !areUmlClassTemplateDataEqual(
+            selectedUmlClassDataRef.current,
+            nextSelectedUmlData,
+          )
+        ) {
+          selectedUmlClassDataRef.current = nextSelectedUmlData;
+          setSelectedUmlClassData(nextSelectedUmlData);
+        }
       }
 
-      const selectedUmlDiagramRoot = resolveSelectedUmlDiagramTemplateRoot(
-        elements,
-        appState.selectedElementIds,
-      );
+      const selectedUmlDiagramRoot =
+        resolveSelectedUmlDiagramTemplateRootWithMap(
+          elementsById,
+          appState.selectedElementIds,
+        );
       if (selectedUmlDiagramRoot && excalidrawAPI) {
         const guard = umlTemplateRelayoutGuardRef.current;
         const shouldSkipRelayout =
           guard.rootId === selectedUmlDiagramRoot.id &&
           Date.now() < guard.until;
-
-        if (!shouldSkipRelayout) {
-          const relayoutDiagramElements = syncUmlDiagramTemplateLayoutInScene(
-            elements,
+        const nextLayoutSignature = getUmlDiagramTemplateLayoutSignature(
+          selectedUmlDiagramRoot,
+          elementsById,
+        );
+        const cachedLayoutSignature =
+          umlDiagramLayoutSignatureCacheRef.current.get(
             selectedUmlDiagramRoot.id,
           );
+        const shouldCheckRelayout =
+          nextLayoutSignature === null ||
+          nextLayoutSignature !== cachedLayoutSignature;
+
+        if (!shouldSkipRelayout && shouldCheckRelayout) {
+          const relayoutDiagramElements =
+            syncUmlDiagramTemplateLayoutInSceneWithMap(
+              elements,
+              selectedUmlDiagramRoot.id,
+              elementsById,
+            );
 
           if (relayoutDiagramElements !== elements) {
+            const relayoutElementsById = new Map<string, ExcalidrawElement>(
+              relayoutDiagramElements.map((element) => [element.id, element]),
+            );
+            const relayoutRoot = relayoutElementsById.get(
+              selectedUmlDiagramRoot.id,
+            );
+            const relayoutSignature = getUmlDiagramTemplateLayoutSignature(
+              relayoutRoot,
+              relayoutElementsById,
+            );
+            if (relayoutSignature) {
+              umlDiagramLayoutSignatureCacheRef.current.set(
+                selectedUmlDiagramRoot.id,
+                relayoutSignature,
+              );
+            }
             umlTemplateRelayoutGuardRef.current = {
               rootId: selectedUmlDiagramRoot.id,
               until: Date.now() + 200,
@@ -1795,6 +1937,13 @@ const ExcalidrawWrapper = () => {
             });
             return;
           }
+        }
+
+        if (nextLayoutSignature) {
+          umlDiagramLayoutSignatureCacheRef.current.set(
+            selectedUmlDiagramRoot.id,
+            nextLayoutSignature,
+          );
         }
       }
 
@@ -1809,25 +1958,40 @@ const ExcalidrawWrapper = () => {
       const nextSelectedUmlDiagramRootId = editableUmlDiagramData
         ? selectedUmlDiagramRoot?.id || null
         : null;
+      const nextUmlDiagramSelectionSignature = buildUmlSelectionSignature(
+        selectedElementIdsSignature,
+        nextSelectedUmlDiagramRootId,
+        serializeUmlDiagramTemplateData(editableUmlDiagramData),
+      );
 
       if (
-        selectedUmlDiagramRootIdRef.current !== nextSelectedUmlDiagramRootId
+        umlDiagramSelectionSignatureRef.current !==
+        nextUmlDiagramSelectionSignature
       ) {
-        selectedUmlDiagramRootIdRef.current = nextSelectedUmlDiagramRootId;
-        setSelectedUmlDiagramRootId(nextSelectedUmlDiagramRootId);
-      }
+        umlDiagramSelectionSignatureRef.current =
+          nextUmlDiagramSelectionSignature;
 
-      if (
-        !areUmlDiagramTemplateDataEqual(
-          selectedUmlDiagramDataRef.current,
-          editableUmlDiagramData,
-        )
-      ) {
-        selectedUmlDiagramDataRef.current = editableUmlDiagramData;
-        setSelectedUmlDiagramData(editableUmlDiagramData);
+        if (
+          selectedUmlDiagramRootIdRef.current !== nextSelectedUmlDiagramRootId
+        ) {
+          selectedUmlDiagramRootIdRef.current = nextSelectedUmlDiagramRootId;
+          setSelectedUmlDiagramRootId(nextSelectedUmlDiagramRootId);
+        }
+
+        if (
+          !areUmlDiagramTemplateDataEqual(
+            selectedUmlDiagramDataRef.current,
+            editableUmlDiagramData,
+          )
+        ) {
+          selectedUmlDiagramDataRef.current = editableUmlDiagramData;
+          setSelectedUmlDiagramData(editableUmlDiagramData);
+        }
       }
     } catch (error) {
       console.error("Failed to sync UML template sidebar state", error);
+      umlClassSelectionSignatureRef.current = "";
+      umlDiagramSelectionSignatureRef.current = "";
       if (selectedUmlClassRootIdRef.current !== null) {
         selectedUmlClassRootIdRef.current = null;
         setSelectedUmlClassRootId(null);

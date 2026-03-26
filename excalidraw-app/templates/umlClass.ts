@@ -100,6 +100,8 @@ type UmlClassLayoutFontSizes = {
   methods: number;
 };
 
+type ElementsById = ReadonlyMap<string, ExcalidrawElement>;
+
 export const createDefaultUmlClassTemplateData = (
   preset: UmlClassTemplatePreset = "class",
 ): UmlClassTemplateData => {
@@ -587,25 +589,85 @@ export const createUmlClassTemplate = (
   ];
 };
 
-const findElementById = <T extends ExcalidrawElement>(
+const buildElementsById = (
   elements: readonly ExcalidrawElement[],
+): ElementsById => new Map(elements.map((element) => [element.id, element]));
+
+const findElementByIdFromMap = <T extends ExcalidrawElement>(
+  elementsById: ElementsById,
   id: string | undefined,
 ): T | null => {
   if (!id) {
     return null;
   }
 
-  return (
-    (elements.find((element) => element.id === id) as T | undefined) || null
-  );
+  return (elementsById.get(id) as T | undefined) || null;
 };
 
-export const updateUmlClassTemplateInScene = (
+const getChildElementIds = (
+  rootCustomData: UmlClassTemplateCustomData,
+): UmlClassChildElementIds => ({
+  titleTextId: rootCustomData.childElementIds?.titleTextId || randomId(),
+  attributesTextId:
+    rootCustomData.childElementIds?.attributesTextId || randomId(),
+  methodsTextId: rootCustomData.childElementIds?.methodsTextId || randomId(),
+  dividerAttributesId:
+    rootCustomData.childElementIds?.dividerAttributesId || randomId(),
+  dividerMethodsId:
+    rootCustomData.childElementIds?.dividerMethodsId || randomId(),
+});
+
+const serializeMembersForSignature = (members: UmlClassTemplateMember[]) =>
+  members.map((member) => member.text).join("\n");
+
+export const getUmlClassTemplateLayoutSignature = (
+  root: ExcalidrawElement | null | undefined,
+  elementsById?: ElementsById,
+) => {
+  const rootCustomData = getTemplateCustomData(root);
+
+  if (!root || !rootCustomData || rootCustomData.templateRole !== "root") {
+    return null;
+  }
+
+  const resolvedElementsById =
+    elementsById || new Map<string, ExcalidrawElement>([[root.id, root]]);
+  const childElementIds = getChildElementIds(rootCustomData);
+  const titleElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    resolvedElementsById,
+    childElementIds.titleTextId,
+  );
+  const attributesElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    resolvedElementsById,
+    childElementIds.attributesTextId,
+  );
+  const methodsElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    resolvedElementsById,
+    childElementIds.methodsTextId,
+  );
+  const data = normalizeUmlClassTemplateData(rootCustomData.templateData);
+
+  return [
+    root.id,
+    root.width,
+    root.height,
+    titleElement?.fontSize || UML_CLASS_TITLE_FONT_SIZE,
+    attributesElement?.fontSize || UML_CLASS_BODY_FONT_SIZE,
+    methodsElement?.fontSize || UML_CLASS_BODY_FONT_SIZE,
+    data.name,
+    data.stereotype || "",
+    serializeMembersForSignature(data.attributes),
+    serializeMembersForSignature(data.methods),
+  ].join("::");
+};
+
+export const updateUmlClassTemplateInSceneWithMap = (
   elements: readonly ExcalidrawElement[],
   rootId: string,
   data: Partial<UmlClassTemplateData> | null | undefined,
+  elementsById: ElementsById,
 ): ExcalidrawElement[] => {
-  const root = findElementById<ExcalidrawElement>(elements, rootId);
+  const root = findElementByIdFromMap<ExcalidrawElement>(elementsById, rootId);
   const rootCustomData = getTemplateCustomData(root);
 
   if (!root || !rootCustomData || rootCustomData.templateRole !== "root") {
@@ -613,35 +675,27 @@ export const updateUmlClassTemplateInScene = (
   }
 
   const normalizedData = normalizeUmlClassTemplateData(data);
-  const childElementIds: UmlClassChildElementIds = {
-    titleTextId: rootCustomData.childElementIds?.titleTextId || randomId(),
-    attributesTextId:
-      rootCustomData.childElementIds?.attributesTextId || randomId(),
-    methodsTextId: rootCustomData.childElementIds?.methodsTextId || randomId(),
-    dividerAttributesId:
-      rootCustomData.childElementIds?.dividerAttributesId || randomId(),
-    dividerMethodsId:
-      rootCustomData.childElementIds?.dividerMethodsId || randomId(),
-  };
+  const childElementIds = getChildElementIds(rootCustomData);
   const groupIds = root.groupIds?.length ? [...root.groupIds] : [rootId];
-  const titleElement = findElementById<ExcalidrawTextElement>(
-    elements,
+  const titleElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
     childElementIds.titleTextId,
   );
-  const attributesElement = findElementById<ExcalidrawTextElement>(
-    elements,
+  const attributesElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
     childElementIds.attributesTextId,
   );
-  const methodsElement = findElementById<ExcalidrawTextElement>(
-    elements,
+  const methodsElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
     childElementIds.methodsTextId,
   );
-  const dividerAttributesElement = findElementById<ExcalidrawLinearElement>(
-    elements,
-    childElementIds.dividerAttributesId,
-  );
-  const dividerMethodsElement = findElementById<ExcalidrawLinearElement>(
-    elements,
+  const dividerAttributesElement =
+    findElementByIdFromMap<ExcalidrawLinearElement>(
+      elementsById,
+      childElementIds.dividerAttributesId,
+    );
+  const dividerMethodsElement = findElementByIdFromMap<ExcalidrawLinearElement>(
+    elementsById,
     childElementIds.dividerMethodsId,
   );
   const layoutFontSizes = getLayoutFontSizes(
@@ -721,7 +775,7 @@ export const updateUmlClassTemplateInScene = (
   );
 
   replacementMap.forEach((element, id) => {
-    if (!elements.some((existingElement) => existingElement.id === id)) {
+    if (!elementsById.has(id)) {
       nextElements.push(element);
     }
   });
@@ -729,11 +783,24 @@ export const updateUmlClassTemplateInScene = (
   return nextElements;
 };
 
-export const syncUmlClassTemplateLayoutInScene = (
+export const updateUmlClassTemplateInScene = (
   elements: readonly ExcalidrawElement[],
   rootId: string,
+  data: Partial<UmlClassTemplateData> | null | undefined,
+): ExcalidrawElement[] =>
+  updateUmlClassTemplateInSceneWithMap(
+    elements,
+    rootId,
+    data,
+    buildElementsById(elements),
+  );
+
+export const syncUmlClassTemplateLayoutInSceneWithMap = (
+  elements: readonly ExcalidrawElement[],
+  rootId: string,
+  elementsById: ElementsById,
 ): ExcalidrawElement[] => {
-  const root = findElementById<ExcalidrawElement>(elements, rootId);
+  const root = findElementByIdFromMap<ExcalidrawElement>(elementsById, rootId);
   const rootCustomData = getTemplateCustomData(root);
 
   if (!root || !rootCustomData || rootCustomData.templateRole !== "root") {
@@ -741,27 +808,18 @@ export const syncUmlClassTemplateLayoutInScene = (
   }
 
   const data = normalizeUmlClassTemplateData(rootCustomData.templateData);
-  const childElementIds: UmlClassChildElementIds = {
-    titleTextId: rootCustomData.childElementIds?.titleTextId || randomId(),
-    attributesTextId:
-      rootCustomData.childElementIds?.attributesTextId || randomId(),
-    methodsTextId: rootCustomData.childElementIds?.methodsTextId || randomId(),
-    dividerAttributesId:
-      rootCustomData.childElementIds?.dividerAttributesId || randomId(),
-    dividerMethodsId:
-      rootCustomData.childElementIds?.dividerMethodsId || randomId(),
-  };
+  const childElementIds = getChildElementIds(rootCustomData);
 
-  const titleElement = findElementById<ExcalidrawTextElement>(
-    elements,
+  const titleElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
     childElementIds.titleTextId,
   );
-  const attributesElement = findElementById<ExcalidrawTextElement>(
-    elements,
+  const attributesElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
     childElementIds.attributesTextId,
   );
-  const methodsElement = findElementById<ExcalidrawTextElement>(
-    elements,
+  const methodsElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
     childElementIds.methodsTextId,
   );
   const layoutFontSizes = getLayoutFontSizes(
@@ -782,13 +840,28 @@ export const syncUmlClassTemplateLayoutInScene = (
     return elements as ExcalidrawElement[];
   }
 
-  return updateUmlClassTemplateInScene(elements, rootId, data);
+  return updateUmlClassTemplateInSceneWithMap(
+    elements,
+    rootId,
+    data,
+    elementsById,
+  );
 };
 
 type AppStateSelection = Record<string, boolean>;
 
-export const resolveSelectedUmlClassTemplateRoot = (
+export const syncUmlClassTemplateLayoutInScene = (
   elements: readonly ExcalidrawElement[],
+  rootId: string,
+): ExcalidrawElement[] =>
+  syncUmlClassTemplateLayoutInSceneWithMap(
+    elements,
+    rootId,
+    buildElementsById(elements),
+  );
+
+export const resolveSelectedUmlClassTemplateRootWithMap = (
+  elementsById: ElementsById,
   selectedElementIds: AppStateSelection | null | undefined,
 ): NonDeletedExcalidrawElement | null => {
   if (!selectedElementIds) {
@@ -805,11 +878,15 @@ export const resolveSelectedUmlClassTemplateRoot = (
 
   const selectedElements = selectedIds
     .map((elementId) =>
-      elements.find(
-        (element) => element.id === elementId && !element.isDeleted,
+      findElementByIdFromMap<NonDeletedExcalidrawElement>(
+        elementsById,
+        elementId,
       ),
     )
-    .filter(Boolean) as NonDeletedExcalidrawElement[];
+    .filter(
+      (element): element is NonDeletedExcalidrawElement =>
+        !!element && !element.isDeleted,
+    );
 
   if (!selectedElements.length) {
     return null;
@@ -830,9 +907,19 @@ export const resolveSelectedUmlClassTemplateRoot = (
   }
 
   const [resolvedRootId] = [...rootIds];
-  const rootElement = elements.find(
-    (element) => element.id === resolvedRootId && !element.isDeleted,
+  const rootElement = findElementByIdFromMap<NonDeletedExcalidrawElement>(
+    elementsById,
+    resolvedRootId,
   );
 
-  return (rootElement as NonDeletedExcalidrawElement | undefined) || null;
+  return rootElement && !rootElement.isDeleted ? rootElement : null;
 };
+
+export const resolveSelectedUmlClassTemplateRoot = (
+  elements: readonly ExcalidrawElement[],
+  selectedElementIds: AppStateSelection | null | undefined,
+): NonDeletedExcalidrawElement | null =>
+  resolveSelectedUmlClassTemplateRootWithMap(
+    buildElementsById(elements),
+    selectedElementIds,
+  );

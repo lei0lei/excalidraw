@@ -74,6 +74,8 @@ type TextMetrics = {
   lineHeight: number;
 };
 
+type ElementsById = ReadonlyMap<string, ExcalidrawElement>;
+
 const STROKE_COLOR = "#111827";
 const TEXT_COLOR = "#1f2937";
 const UML_DIAGRAM_HORIZONTAL_PADDING = 72;
@@ -464,17 +466,62 @@ const createOrUpdateLine = (
   }) as NonDeleted<ExcalidrawLinearElement>;
 };
 
-const findElementById = <T extends ExcalidrawElement>(
+const buildElementsById = (
   elements: readonly ExcalidrawElement[],
+): ElementsById => new Map(elements.map((element) => [element.id, element]));
+
+const findElementByIdFromMap = <T extends ExcalidrawElement>(
+  elementsById: ElementsById,
   id: string | undefined,
 ): T | null => {
   if (!id) {
     return null;
   }
 
-  return (
-    (elements.find((element) => element.id === id) as T | undefined) || null
+  return (elementsById.get(id) as T | undefined) || null;
+};
+
+const getChildElementIds = (
+  rootCustomData: UmlDiagramTemplateCustomData,
+): UmlDiagramChildElementIds => ({
+  ...rootCustomData.childElementIds,
+  labelTextId: rootCustomData.childElementIds?.labelTextId || randomId(),
+  bodyTextId: rootCustomData.childElementIds?.bodyTextId || randomId(),
+});
+
+export const getUmlDiagramTemplateLayoutSignature = (
+  root: ExcalidrawElement | null | undefined,
+  elementsById?: ElementsById,
+) => {
+  const rootCustomData = getTemplateCustomData(root);
+
+  if (!root || !rootCustomData || rootCustomData.templateRole !== "root") {
+    return null;
+  }
+
+  const resolvedElementsById =
+    elementsById || new Map<string, ExcalidrawElement>([[root.id, root]]);
+  const childElementIds = getChildElementIds(rootCustomData);
+  const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    resolvedElementsById,
+    childElementIds.labelTextId,
   );
+  const bodyElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    resolvedElementsById,
+    childElementIds.bodyTextId,
+  );
+  const data = normalizeUmlDiagramTemplateData(rootCustomData.templateData);
+
+  return [
+    root.id,
+    data.preset,
+    root.width,
+    root.height,
+    labelElement?.fontSize || 0,
+    bodyElement?.fontSize || 0,
+    data.label,
+    data.body || "",
+  ].join("::");
 };
 
 const getRelationLineConfig = (preset: UmlDiagramTemplatePreset) => {
@@ -1002,12 +1049,13 @@ export const createUmlDiagramTemplate = (
       return createSequenceLifelineTemplate(x, y, data);
   }
 };
-export const updateUmlDiagramTemplateInScene = (
+export const updateUmlDiagramTemplateInSceneWithMap = (
   elements: readonly ExcalidrawElement[],
   rootId: string,
   data: Partial<UmlDiagramTemplateData> | null | undefined,
+  elementsById: ElementsById,
 ): ExcalidrawElement[] => {
-  const root = findElementById<ExcalidrawElement>(elements, rootId);
+  const root = findElementByIdFromMap<ExcalidrawElement>(elementsById, rootId);
   const rootCustomData = getTemplateCustomData(root);
 
   if (!root || !rootCustomData || rootCustomData.templateRole !== "root") {
@@ -1031,8 +1079,8 @@ export const updateUmlDiagramTemplateInScene = (
   const replacementMap = new Map<string, ExcalidrawElement>();
 
   if (currentData.preset === "actor") {
-    const labelElement = findElementById<ExcalidrawTextElement>(
-      elements,
+    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+      elementsById,
       childElementIds.labelTextId,
     );
     const labelFontSize = labelElement?.fontSize || 18;
@@ -1054,8 +1102,8 @@ export const updateUmlDiagramTemplateInScene = (
   }
 
   if (currentData.preset === "use-case") {
-    const labelElement = findElementById<ExcalidrawTextElement>(
-      elements,
+    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+      elementsById,
       childElementIds.labelTextId,
     );
     const labelFontSize = labelElement?.fontSize || 20;
@@ -1085,19 +1133,19 @@ export const updateUmlDiagramTemplateInScene = (
   }
 
   if (currentData.preset === "package") {
-    const labelElement = findElementById<ExcalidrawTextElement>(
-      elements,
+    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+      elementsById,
       childElementIds.labelTextId,
     );
     const labelFontSize = labelElement?.fontSize || 18;
     const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
     const layout = getPackageLayout(labelMetrics);
-    const tabElement = findElementById<ExcalidrawElement>(
-      elements,
+    const tabElement = findElementByIdFromMap<ExcalidrawElement>(
+      elementsById,
       childElementIds.decoration1Id,
     );
-    const keywordElement = findElementById<ExcalidrawTextElement>(
-      elements,
+    const keywordElement = findElementByIdFromMap<ExcalidrawTextElement>(
+      elementsById,
       childElementIds.decoration2Id,
     );
     const nextRoot = newElementWith(root, {
@@ -1143,12 +1191,12 @@ export const updateUmlDiagramTemplateInScene = (
   }
 
   if (currentData.preset === "note") {
-    const labelElement = findElementById<ExcalidrawTextElement>(
-      elements,
+    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+      elementsById,
       childElementIds.labelTextId,
     );
-    const bodyElement = findElementById<ExcalidrawTextElement>(
-      elements,
+    const bodyElement = findElementByIdFromMap<ExcalidrawTextElement>(
+      elementsById,
       childElementIds.bodyTextId,
     );
     const labelFontSize = labelElement?.fontSize || 18;
@@ -1168,16 +1216,16 @@ export const updateUmlDiagramTemplateInScene = (
     );
     const foldWidth = 38;
     const foldHeight = 34;
-    const foldTop = findElementById<ExcalidrawLinearElement>(
-      elements,
+    const foldTop = findElementByIdFromMap<ExcalidrawLinearElement>(
+      elementsById,
       childElementIds.decoration1Id,
     );
-    const foldRight = findElementById<ExcalidrawLinearElement>(
-      elements,
+    const foldRight = findElementByIdFromMap<ExcalidrawLinearElement>(
+      elementsById,
       childElementIds.decoration2Id,
     );
-    const foldDiagonal = findElementById<ExcalidrawLinearElement>(
-      elements,
+    const foldDiagonal = findElementByIdFromMap<ExcalidrawLinearElement>(
+      elementsById,
       childElementIds.decoration3Id,
     );
 
@@ -1255,19 +1303,19 @@ export const updateUmlDiagramTemplateInScene = (
     replacementMap.set(nextFoldDiagonal.id, nextFoldDiagonal);
   }
   if (currentData.preset === "component") {
-    const labelElement = findElementById<ExcalidrawTextElement>(
-      elements,
+    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+      elementsById,
       childElementIds.labelTextId,
     );
     const labelFontSize = labelElement?.fontSize || 20;
     const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
     const layout = getComponentLayout(labelMetrics);
-    const port1 = findElementById<ExcalidrawElement>(
-      elements,
+    const port1 = findElementByIdFromMap<ExcalidrawElement>(
+      elementsById,
       childElementIds.decoration1Id,
     );
-    const port2 = findElementById<ExcalidrawElement>(
-      elements,
+    const port2 = findElementByIdFromMap<ExcalidrawElement>(
+      elementsById,
       childElementIds.decoration2Id,
     );
     const nextRoot = newElementWith(root, {
@@ -1324,8 +1372,8 @@ export const updateUmlDiagramTemplateInScene = (
       groupIds,
       customData: buildRootCustomData(rootId, nextData, childElementIds),
     });
-    const labelElement = findElementById<ExcalidrawTextElement>(
-      elements,
+    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+      elementsById,
       childElementIds.labelTextId,
     );
     const labelFontSize = labelElement?.fontSize || 16;
@@ -1345,15 +1393,15 @@ export const updateUmlDiagramTemplateInScene = (
   }
 
   if (currentData.preset === "sequence-lifeline") {
-    const labelElement = findElementById<ExcalidrawTextElement>(
-      elements,
+    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+      elementsById,
       childElementIds.labelTextId,
     );
     const labelFontSize = labelElement?.fontSize || 18;
     const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
     const layout = getSequenceLayout(labelMetrics);
-    const lifelineElement = findElementById<ExcalidrawLinearElement>(
-      elements,
+    const lifelineElement = findElementByIdFromMap<ExcalidrawLinearElement>(
+      elementsById,
       childElementIds.decoration1Id,
     );
     const nextRoot = newElementWith(root, {
@@ -1396,7 +1444,7 @@ export const updateUmlDiagramTemplateInScene = (
   );
 
   replacementMap.forEach((element, id) => {
-    if (!elements.some((existingElement) => existingElement.id === id)) {
+    if (!elementsById.has(id)) {
       nextElements.push(element);
     }
   });
@@ -1404,11 +1452,24 @@ export const updateUmlDiagramTemplateInScene = (
   return nextElements;
 };
 
-export const syncUmlDiagramTemplateLayoutInScene = (
+export const updateUmlDiagramTemplateInScene = (
   elements: readonly ExcalidrawElement[],
   rootId: string,
+  data: Partial<UmlDiagramTemplateData> | null | undefined,
+): ExcalidrawElement[] =>
+  updateUmlDiagramTemplateInSceneWithMap(
+    elements,
+    rootId,
+    data,
+    buildElementsById(elements),
+  );
+
+export const syncUmlDiagramTemplateLayoutInSceneWithMap = (
+  elements: readonly ExcalidrawElement[],
+  rootId: string,
+  elementsById: ElementsById,
 ): ExcalidrawElement[] => {
-  const root = findElementById<ExcalidrawElement>(elements, rootId);
+  const root = findElementByIdFromMap<ExcalidrawElement>(elementsById, rootId);
   const rootCustomData = getTemplateCustomData(root);
 
   if (!root || !rootCustomData || rootCustomData.templateRole !== "root") {
@@ -1416,17 +1477,13 @@ export const syncUmlDiagramTemplateLayoutInScene = (
   }
 
   const data = normalizeUmlDiagramTemplateData(rootCustomData.templateData);
-  const childElementIds = {
-    ...rootCustomData.childElementIds,
-    labelTextId: rootCustomData.childElementIds?.labelTextId || randomId(),
-    bodyTextId: rootCustomData.childElementIds?.bodyTextId || randomId(),
-  } as UmlDiagramChildElementIds;
-  const labelElement = findElementById<ExcalidrawTextElement>(
-    elements,
+  const childElementIds = getChildElementIds(rootCustomData);
+  const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
     childElementIds.labelTextId,
   );
-  const bodyElement = findElementById<ExcalidrawTextElement>(
-    elements,
+  const bodyElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
     childElementIds.bodyTextId,
   );
 
@@ -1504,11 +1561,26 @@ export const syncUmlDiagramTemplateLayoutInScene = (
     return elements as ExcalidrawElement[];
   }
 
-  return updateUmlDiagramTemplateInScene(elements, rootId, data);
+  return updateUmlDiagramTemplateInSceneWithMap(
+    elements,
+    rootId,
+    data,
+    elementsById,
+  );
 };
 
-export const resolveSelectedUmlDiagramTemplateRoot = (
+export const syncUmlDiagramTemplateLayoutInScene = (
   elements: readonly ExcalidrawElement[],
+  rootId: string,
+): ExcalidrawElement[] =>
+  syncUmlDiagramTemplateLayoutInSceneWithMap(
+    elements,
+    rootId,
+    buildElementsById(elements),
+  );
+
+export const resolveSelectedUmlDiagramTemplateRootWithMap = (
+  elementsById: ElementsById,
   selectedElementIds: AppStateSelection | null | undefined,
 ): NonDeletedExcalidrawElement | null => {
   if (!selectedElementIds) {
@@ -1525,11 +1597,15 @@ export const resolveSelectedUmlDiagramTemplateRoot = (
 
   const selectedElements = selectedIds
     .map((elementId) =>
-      elements.find(
-        (element) => element.id === elementId && !element.isDeleted,
+      findElementByIdFromMap<NonDeletedExcalidrawElement>(
+        elementsById,
+        elementId,
       ),
     )
-    .filter(Boolean) as NonDeletedExcalidrawElement[];
+    .filter(
+      (element): element is NonDeletedExcalidrawElement =>
+        !!element && !element.isDeleted,
+    );
 
   if (!selectedElements.length) {
     return null;
@@ -1550,9 +1626,19 @@ export const resolveSelectedUmlDiagramTemplateRoot = (
   }
 
   const [resolvedRootId] = [...rootIds];
-  const rootElement = elements.find(
-    (element) => element.id === resolvedRootId && !element.isDeleted,
+  const rootElement = findElementByIdFromMap<NonDeletedExcalidrawElement>(
+    elementsById,
+    resolvedRootId,
   );
 
-  return (rootElement as NonDeletedExcalidrawElement | undefined) || null;
+  return rootElement && !rootElement.isDeleted ? rootElement : null;
 };
+
+export const resolveSelectedUmlDiagramTemplateRoot = (
+  elements: readonly ExcalidrawElement[],
+  selectedElementIds: AppStateSelection | null | undefined,
+): NonDeletedExcalidrawElement | null =>
+  resolveSelectedUmlDiagramTemplateRootWithMap(
+    buildElementsById(elements),
+    selectedElementIds,
+  );
