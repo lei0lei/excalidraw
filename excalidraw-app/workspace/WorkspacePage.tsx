@@ -195,6 +195,7 @@ const WORKSPACE_PREVIEW_CARD_HEIGHT = 248;
 const WORKSPACE_PREVIEW_GRID_GAP = 16;
 const WORKSPACE_PREVIEW_OVERSCAN_ROWS = 2;
 const MAX_FOLDER_LOAD_CONCURRENCY = 2;
+const FOLDER_CACHE_STALE_MS = 30_000;
 
 const getStoredWorkspaceBackend = (): BackendId => {
   if (typeof window === "undefined") {
@@ -999,7 +1000,11 @@ export const WorkspacePage = ({
   const [previewScrollTop, setPreviewScrollTop] = useState(0);
   const [previewViewportHeight, setPreviewViewportHeight] = useState(0);
   const [previewViewportWidth, setPreviewViewportWidth] = useState(0);
+  const workspaceSessionRef = useRef(0);
   const folderCacheRef = useRef<Record<string, CachedFolderContents>>({});
+  const activeFolderLoadsRef = useRef<
+    Record<string, Promise<void> | undefined>
+  >({});
   const folderRequestLimiterRef = useRef(
     createTaskLimiter(MAX_FOLDER_LOAD_CONCURRENCY),
   );
@@ -1042,7 +1047,9 @@ export const WorkspacePage = ({
 
   const resetWorkspaceState = useCallback(
     (nextRootFolder: WorkspaceFolderNode | null) => {
+      workspaceSessionRef.current += 1;
       activeThumbnailLoadKeysRef.current = {};
+      activeFolderLoadsRef.current = {};
       clearAllThumbnailRetries();
       setRootFolder(nextRootFolder);
       setSelectedFolderId(nextRootFolder?.id ?? null);
@@ -1241,57 +1248,92 @@ export const WorkspacePage = ({
     [],
   );
 
+  const fetchFolderContents = useCallback(
+    async (folder: WorkspaceFolderNode) => {
+      return folderRequestLimiterRef.current(async () => {
+        if (folder.provider === "google-drive") {
+          const result = await listGoogleDriveFolderChildren(folder.rawId);
+          setIsDriveConnected(true);
+
+          return {
+            folders: result.folders.map((childFolder) =>
+              toGoogleFolderNode(childFolder, folder.rawId),
+            ),
+            files: result.files.map((file) => toGoogleFileNode(file)),
+          };
+        }
+
+        const result = await listLocalFolderChildren(
+          folder.data as LocalDirectoryFolder,
+        );
+        return {
+          folders: result.folders.map((childFolder) =>
+            toLocalFolderNode(childFolder),
+          ),
+          files: result.files.map((file) => toLocalFileNode(file)),
+        };
+      });
+    },
+    [],
+  );
+
   const loadFolder = useCallback(
-    async (folder: WorkspaceFolderNode, opts?: { force?: boolean }) => {
-      if (!opts?.force) {
-        const cachedContents = folderCacheRef.current[folder.id];
-        if (cachedContents) {
-          applyFolderContents(folder, cachedContents);
+    async (
+      folder: WorkspaceFolderNode,
+      opts?: { force?: boolean; background?: boolean },
+    ) => {
+      const cachedContents = folderCacheRef.current[folder.id];
+      const isCacheFresh =
+        !!cachedContents &&
+        Date.now() - cachedContents.loadedAt < FOLDER_CACHE_STALE_MS;
+      const sessionId = workspaceSessionRef.current;
+
+      if (cachedContents && !opts?.force) {
+        applyFolderContents(folder, cachedContents);
+
+        if (isCacheFresh) {
           return;
         }
       }
 
-      setLoadingFolderIds((prev) => {
-        const next = new Set(prev);
-        next.add(folder.id);
-        return next;
-      });
+      if (activeFolderLoadsRef.current[folder.id]) {
+        return activeFolderLoadsRef.current[folder.id];
+      }
 
-      try {
-        const contents = await folderRequestLimiterRef.current(async () => {
-          if (folder.provider === "google-drive") {
-            const result = await listGoogleDriveFolderChildren(folder.rawId);
-            setIsDriveConnected(true);
+      const shouldShowLoading = !opts?.background && !cachedContents;
 
-            return {
-              folders: result.folders.map((childFolder) =>
-                toGoogleFolderNode(childFolder, folder.rawId),
-              ),
-              files: result.files.map((file) => toGoogleFileNode(file)),
-            };
-          }
-
-          const result = await listLocalFolderChildren(
-            folder.data as LocalDirectoryFolder,
-          );
-          return {
-            folders: result.folders.map((childFolder) =>
-              toLocalFolderNode(childFolder),
-            ),
-            files: result.files.map((file) => toLocalFileNode(file)),
-          };
-        });
-
-        applyFolderContents(folder, contents);
-      } finally {
+      if (shouldShowLoading) {
         setLoadingFolderIds((prev) => {
           const next = new Set(prev);
-          next.delete(folder.id);
+          next.add(folder.id);
           return next;
         });
       }
+
+      const request = (async () => {
+        try {
+          const contents = await fetchFolderContents(folder);
+          if (workspaceSessionRef.current !== sessionId) {
+            return;
+          }
+          applyFolderContents(folder, contents);
+        } finally {
+          delete activeFolderLoadsRef.current[folder.id];
+
+          if (shouldShowLoading) {
+            setLoadingFolderIds((prev) => {
+              const next = new Set(prev);
+              next.delete(folder.id);
+              return next;
+            });
+          }
+        }
+      })();
+
+      activeFolderLoadsRef.current[folder.id] = request;
+      return request;
     },
-    [applyFolderContents],
+    [applyFolderContents, fetchFolderContents],
   );
 
   useEffect(() => {
@@ -1333,6 +1375,16 @@ export const WorkspacePage = ({
     async (folder: WorkspaceFolderNode) => {
       if (!folderChildrenByParent[folder.id] || !filesByFolderId[folder.id]) {
         await loadFolder(folder);
+        return;
+      }
+
+      const cachedContents = folderCacheRef.current[folder.id];
+      const isCacheFresh =
+        !!cachedContents &&
+        Date.now() - cachedContents.loadedAt < FOLDER_CACHE_STALE_MS;
+
+      if (!isCacheFresh) {
+        void loadFolder(folder, { background: true });
       }
     },
     [filesByFolderId, folderChildrenByParent, loadFolder],
