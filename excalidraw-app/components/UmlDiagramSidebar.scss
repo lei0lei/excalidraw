@@ -1,0 +1,58 @@
+.UmlDiagramSidebar {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.UmlDiagramSidebar__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.UmlDiagramSidebar__type {
+  font-size: 12px;
+  line-height: 1.4;
+  text-transform: capitalize;
+  color: var(--text-primary-color);
+  opacity: 0.66;
+}
+
+.UmlDiagramSidebar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.UmlDiagramSidebar__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary-color);
+}
+
+.UmlDiagramSidebar__input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--sidebar-border-color);
+  border-radius: 10px;
+  background: var(--input-bg-color, var(--island-bg-color));
+  color: var(--text-primary-color);
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.UmlDiagramSidebar__input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.UmlDiagramSidebar__textarea {
+  resize: vertical;
+  min-height: 120px;
+}

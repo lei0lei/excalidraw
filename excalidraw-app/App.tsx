@@ -143,6 +143,7 @@ import { CodeBlockDialog } from "./components/CodeBlockDialog";
 import { CodeBlockEmbeddable } from "./components/CodeBlockEmbeddable";
 import { MathFormulaEmbeddable } from "./components/MathFormulaEmbeddable";
 import { MathFormulaDialog } from "./components/MathFormulaDialog";
+import { TemplateLibraryDialog } from "./components/TemplateLibraryDialog";
 
 import "./index.scss";
 
@@ -178,6 +179,28 @@ import {
   normalizeMathFormulaStyle,
   type MathFormulaStyle,
 } from "./math/formula";
+import {
+  createDefaultUmlClassTemplateData,
+  createUmlClassTemplate,
+  getUmlClassTemplateData,
+  getUmlClassTemplateRootId,
+  resolveSelectedUmlClassTemplateRoot,
+  syncUmlClassTemplateLayoutInScene,
+  updateUmlClassTemplateInScene,
+  type UmlClassTemplateData,
+  type UmlClassTemplatePreset,
+} from "./templates/umlClass";
+import {
+  createUmlDiagramTemplate,
+  getUmlDiagramTemplateData,
+  getUmlDiagramTemplateRootId,
+  isEditableUmlDiagramTemplatePreset,
+  resolveSelectedUmlDiagramTemplateRoot,
+  syncUmlDiagramTemplateLayoutInScene,
+  updateUmlDiagramTemplateInScene,
+  type UmlDiagramTemplateData,
+  type UmlDiagramTemplatePreset,
+} from "./templates/umlDiagram";
 
 import type { CollabAPI } from "./collab/Collab";
 import type { GoogleDriveFile } from "./workspace/data/googleDrive";
@@ -214,6 +237,48 @@ type SaveIndicatorStatus =
   | "saved"
   | "error"
   | "conflict";
+
+const areUmlClassTemplateDataEqual = (
+  left: UmlClassTemplateData | null,
+  right: UmlClassTemplateData | null,
+) => {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const serializeMembers = (items: UmlClassTemplateData["attributes"]) =>
+    items.map((item) => item.text).join("\n");
+
+  return (
+    left.name === right.name &&
+    (left.stereotype || "") === (right.stereotype || "") &&
+    serializeMembers(left.attributes) === serializeMembers(right.attributes) &&
+    serializeMembers(left.methods) === serializeMembers(right.methods)
+  );
+};
+
+const areUmlDiagramTemplateDataEqual = (
+  left: UmlDiagramTemplateData | null,
+  right: UmlDiagramTemplateData | null,
+) => {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.preset === right.preset &&
+    left.label === right.label &&
+    (left.body || "") === (right.body || "")
+  );
+};
 
 polyfill();
 
@@ -676,6 +741,18 @@ const ExcalidrawWrapper = () => {
     useState<MathFormulaDialogState | null>(null);
   const [codeBlockDialogState, setCodeBlockDialogState] =
     useState<CodeBlockDialogState | null>(null);
+  const [isTemplateLibraryDialogOpen, setIsTemplateLibraryDialogOpen] =
+    useState(false);
+  const [selectedUmlClassRootId, setSelectedUmlClassRootId] = useState<
+    string | null
+  >(null);
+  const [selectedUmlClassData, setSelectedUmlClassData] =
+    useState<UmlClassTemplateData | null>(null);
+  const [selectedUmlDiagramRootId, setSelectedUmlDiagramRootId] = useState<
+    string | null
+  >(null);
+  const [selectedUmlDiagramData, setSelectedUmlDiagramData] =
+    useState<UmlDiagramTemplateData | null>(null);
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -702,6 +779,19 @@ const ExcalidrawWrapper = () => {
     timestamp: number;
     kind: "math-formula" | "code-block";
   } | null>(null);
+  const currentAppStateRef = useRef<AppState | null>(null);
+  const templateLibraryDialogOpenRef = useRef(false);
+  const selectedUmlClassRootIdRef = useRef<string | null>(null);
+  const selectedUmlClassDataRef = useRef<UmlClassTemplateData | null>(null);
+  const selectedUmlDiagramRootIdRef = useRef<string | null>(null);
+  const selectedUmlDiagramDataRef = useRef<UmlDiagramTemplateData | null>(null);
+  const umlTemplateRelayoutGuardRef = useRef<{
+    rootId: string | null;
+    until: number;
+  }>({
+    rootId: null,
+    until: 0,
+  });
 
   const suppressDirtyMark = useCallback((durationMs = 800) => {
     suppressDirtyMarkUntilRef.current = Date.now() + durationMs;
@@ -1159,6 +1249,168 @@ const ExcalidrawWrapper = () => {
   );
 
   useEffect(() => {
+    templateLibraryDialogOpenRef.current = isTemplateLibraryDialogOpen;
+  }, [isTemplateLibraryDialogOpen]);
+
+  const handleCloseTemplateLibraryDialog = useCallback(() => {
+    templateLibraryDialogOpenRef.current = false;
+    setIsTemplateLibraryDialogOpen(false);
+    excalidrawAPI?.setActiveTool({ type: "selection" });
+  }, [excalidrawAPI]);
+
+  const handleInsertUmlClassTemplate = useCallback(
+    (preset: UmlClassTemplatePreset = "class") => {
+      if (!excalidrawAPI) {
+        throw new Error("Excalidraw editor is not ready yet.");
+      }
+
+      const appState =
+        currentAppStateRef.current || excalidrawAPI.getAppState();
+      const zoom = appState.zoom.value || 1;
+      const sceneCenterX = -appState.scrollX + appState.width / (2 * zoom);
+      const sceneCenterY = -appState.scrollY + appState.height / (2 * zoom);
+      const templateElements = createUmlClassTemplate(
+        sceneCenterX - 140,
+        sceneCenterY - 110,
+        createDefaultUmlClassTemplateData(preset),
+      );
+
+      excalidrawAPI.updateScene({
+        elements: [
+          ...excalidrawAPI.getSceneElementsIncludingDeleted(),
+          ...templateElements,
+        ],
+        appState: {
+          selectedElementIds: Object.fromEntries(
+            templateElements.map((element) => [element.id, true]),
+          ),
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+
+      templateLibraryDialogOpenRef.current = false;
+      setIsTemplateLibraryDialogOpen(false);
+      excalidrawAPI.setActiveTool({ type: "selection" });
+      excalidrawAPI.setToast({
+        message: `Inserted UML ${preset}`,
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleInsertUmlDiagramTemplate = useCallback(
+    (preset: UmlDiagramTemplatePreset) => {
+      if (!excalidrawAPI) {
+        throw new Error("Excalidraw editor is not ready yet.");
+      }
+
+      const appState =
+        currentAppStateRef.current || excalidrawAPI.getAppState();
+      const zoom = appState.zoom.value || 1;
+      const sceneCenterX = -appState.scrollX + appState.width / (2 * zoom);
+      const sceneCenterY = -appState.scrollY + appState.height / (2 * zoom);
+      const templateElements = createUmlDiagramTemplate(
+        sceneCenterX - 120,
+        sceneCenterY - 80,
+        preset,
+      );
+
+      excalidrawAPI.updateScene({
+        elements: [
+          ...excalidrawAPI.getSceneElementsIncludingDeleted(),
+          ...templateElements,
+        ],
+        appState: {
+          selectedElementIds: Object.fromEntries(
+            templateElements.map((element) => [element.id, true]),
+          ),
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+
+      templateLibraryDialogOpenRef.current = false;
+      setIsTemplateLibraryDialogOpen(false);
+      excalidrawAPI.setActiveTool({ type: "selection" });
+      excalidrawAPI.setToast({
+        message: `Inserted UML ${preset}`,
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleUpdateSelectedUmlClass = useCallback(
+    (data: UmlClassTemplateData) => {
+      if (!excalidrawAPI || !selectedUmlClassRootId) {
+        return;
+      }
+
+      const nextElements = updateUmlClassTemplateInScene(
+        excalidrawAPI.getSceneElementsIncludingDeleted(),
+        selectedUmlClassRootId,
+        data,
+      );
+
+      excalidrawAPI.updateScene({
+        elements: nextElements,
+        appState: {
+          selectedElementIds: {
+            [selectedUmlClassRootId]: true,
+          },
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [excalidrawAPI, selectedUmlClassRootId],
+  );
+
+  const handleUpdateSelectedUmlDiagram = useCallback(
+    (data: UmlDiagramTemplateData) => {
+      if (!excalidrawAPI || !selectedUmlDiagramRootId) {
+        return;
+      }
+
+      const nextElements = updateUmlDiagramTemplateInScene(
+        excalidrawAPI.getSceneElementsIncludingDeleted(),
+        selectedUmlDiagramRootId,
+        data,
+      );
+
+      excalidrawAPI.updateScene({
+        elements: nextElements,
+        appState: {
+          selectedElementIds: {
+            [selectedUmlDiagramRootId]: true,
+          },
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [excalidrawAPI, selectedUmlDiagramRootId],
+  );
+
+  useEffect(() => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    const openSidebarName = excalidrawAPI.getAppState().openSidebar?.name;
+    const openSidebarTab = excalidrawAPI.getAppState().openSidebar?.tab;
+
+    if (selectedUmlClassRootId || selectedUmlDiagramRootId) {
+      void excalidrawAPI.toggleSidebar({
+        name: "default",
+        tab: "uml-template",
+        force: true,
+      });
+      return;
+    }
+
+    if (openSidebarName === "default" && openSidebarTab === "uml-template") {
+      void excalidrawAPI.toggleSidebar({ name: null });
+    }
+  }, [excalidrawAPI, selectedUmlClassRootId, selectedUmlDiagramRootId]);
+
+  useEffect(() => {
     if (isDevEnv()) {
       const debugState = loadSavedDebugState();
 
@@ -1454,6 +1706,144 @@ const ExcalidrawWrapper = () => {
           }
         }
       });
+    }
+
+    currentAppStateRef.current = appState;
+
+    if (
+      appState.activeTool.type === "custom" &&
+      appState.activeTool.customType === "template-library" &&
+      !templateLibraryDialogOpenRef.current
+    ) {
+      templateLibraryDialogOpenRef.current = true;
+      setIsTemplateLibraryDialogOpen(true);
+      excalidrawAPI?.setActiveTool({ type: "selection" });
+    }
+
+    try {
+      const selectedUmlRoot = resolveSelectedUmlClassTemplateRoot(
+        elements,
+        appState.selectedElementIds,
+      );
+      if (selectedUmlRoot && excalidrawAPI) {
+        const guard = umlTemplateRelayoutGuardRef.current;
+        const shouldSkipRelayout =
+          guard.rootId === selectedUmlRoot.id && Date.now() < guard.until;
+
+        if (!shouldSkipRelayout) {
+          const relayoutElements = syncUmlClassTemplateLayoutInScene(
+            elements,
+            selectedUmlRoot.id,
+          );
+
+          if (relayoutElements !== elements) {
+            umlTemplateRelayoutGuardRef.current = {
+              rootId: selectedUmlRoot.id,
+              until: Date.now() + 200,
+            };
+            excalidrawAPI.updateScene({
+              elements: relayoutElements,
+              captureUpdate: CaptureUpdateAction.NEVER,
+            });
+            return;
+          }
+        }
+      }
+
+      const nextSelectedUmlData = getUmlClassTemplateData(selectedUmlRoot);
+      const nextSelectedUmlRootId = selectedUmlRoot?.id || null;
+
+      if (selectedUmlClassRootIdRef.current !== nextSelectedUmlRootId) {
+        selectedUmlClassRootIdRef.current = nextSelectedUmlRootId;
+        setSelectedUmlClassRootId(nextSelectedUmlRootId);
+      }
+
+      if (
+        !areUmlClassTemplateDataEqual(
+          selectedUmlClassDataRef.current,
+          nextSelectedUmlData,
+        )
+      ) {
+        selectedUmlClassDataRef.current = nextSelectedUmlData;
+        setSelectedUmlClassData(nextSelectedUmlData);
+      }
+
+      const selectedUmlDiagramRoot = resolveSelectedUmlDiagramTemplateRoot(
+        elements,
+        appState.selectedElementIds,
+      );
+      if (selectedUmlDiagramRoot && excalidrawAPI) {
+        const guard = umlTemplateRelayoutGuardRef.current;
+        const shouldSkipRelayout =
+          guard.rootId === selectedUmlDiagramRoot.id &&
+          Date.now() < guard.until;
+
+        if (!shouldSkipRelayout) {
+          const relayoutDiagramElements = syncUmlDiagramTemplateLayoutInScene(
+            elements,
+            selectedUmlDiagramRoot.id,
+          );
+
+          if (relayoutDiagramElements !== elements) {
+            umlTemplateRelayoutGuardRef.current = {
+              rootId: selectedUmlDiagramRoot.id,
+              until: Date.now() + 200,
+            };
+            excalidrawAPI.updateScene({
+              elements: relayoutDiagramElements,
+              captureUpdate: CaptureUpdateAction.NEVER,
+            });
+            return;
+          }
+        }
+      }
+
+      const nextSelectedUmlDiagramData = getUmlDiagramTemplateData(
+        selectedUmlDiagramRoot,
+      );
+      const editableUmlDiagramData =
+        nextSelectedUmlDiagramData &&
+        isEditableUmlDiagramTemplatePreset(nextSelectedUmlDiagramData.preset)
+          ? nextSelectedUmlDiagramData
+          : null;
+      const nextSelectedUmlDiagramRootId = editableUmlDiagramData
+        ? selectedUmlDiagramRoot?.id || null
+        : null;
+
+      if (
+        selectedUmlDiagramRootIdRef.current !== nextSelectedUmlDiagramRootId
+      ) {
+        selectedUmlDiagramRootIdRef.current = nextSelectedUmlDiagramRootId;
+        setSelectedUmlDiagramRootId(nextSelectedUmlDiagramRootId);
+      }
+
+      if (
+        !areUmlDiagramTemplateDataEqual(
+          selectedUmlDiagramDataRef.current,
+          editableUmlDiagramData,
+        )
+      ) {
+        selectedUmlDiagramDataRef.current = editableUmlDiagramData;
+        setSelectedUmlDiagramData(editableUmlDiagramData);
+      }
+    } catch (error) {
+      console.error("Failed to sync UML template sidebar state", error);
+      if (selectedUmlClassRootIdRef.current !== null) {
+        selectedUmlClassRootIdRef.current = null;
+        setSelectedUmlClassRootId(null);
+      }
+      if (selectedUmlClassDataRef.current !== null) {
+        selectedUmlClassDataRef.current = null;
+        setSelectedUmlClassData(null);
+      }
+      if (selectedUmlDiagramRootIdRef.current !== null) {
+        selectedUmlDiagramRootIdRef.current = null;
+        setSelectedUmlDiagramRootId(null);
+      }
+      if (selectedUmlDiagramDataRef.current !== null) {
+        selectedUmlDiagramDataRef.current = null;
+        setSelectedUmlDiagramData(null);
+      }
     }
 
     if (Date.now() > suppressDirtyMarkUntilRef.current) {
@@ -2589,11 +2979,38 @@ const ExcalidrawWrapper = () => {
 
           const codeBlockData = getCodeBlockElementData(hitElement);
           const mathFormulaData = getMathFormulaElementData(hitElement);
+          const umlTemplateRootId = getUmlClassTemplateRootId(hitElement);
+          const umlDiagramRootId = getUmlDiagramTemplateRootId(hitElement);
+          const umlDiagramData = getUmlDiagramTemplateData(hitElement);
           const editableKind = codeBlockData
             ? "code-block"
             : mathFormulaData
             ? "math-formula"
             : null;
+
+          if (umlTemplateRootId) {
+            window.setTimeout(() => {
+              void excalidrawAPI?.toggleSidebar({
+                name: "default",
+                tab: "uml-template",
+                force: true,
+              });
+            }, 0);
+          }
+
+          if (
+            umlDiagramRootId &&
+            umlDiagramData &&
+            isEditableUmlDiagramTemplatePreset(umlDiagramData.preset)
+          ) {
+            window.setTimeout(() => {
+              void excalidrawAPI?.toggleSidebar({
+                name: "default",
+                tab: "uml-template",
+                force: true,
+              });
+            }, 0);
+          }
 
           if (!editableKind || !hitElement) {
             lastEditableEmbeddablePointerRef.current = null;
@@ -2752,6 +3169,10 @@ const ExcalidrawWrapper = () => {
             void handleInstallPWA();
           }}
           showInstallPWA={showInstallPWA}
+          umlTemplateData={selectedUmlClassData}
+          onChangeUmlTemplate={handleUpdateSelectedUmlClass}
+          umlDiagramTemplateData={selectedUmlDiagramData}
+          onChangeUmlDiagramTemplate={handleUpdateSelectedUmlDiagram}
         />
 
         {mathFormulaDialogState && (
@@ -2761,6 +3182,14 @@ const ExcalidrawWrapper = () => {
             mode={mathFormulaDialogState.mode}
             onClose={handleCloseMathFormulaDialog}
             onSubmit={handleSubmitMathFormula}
+          />
+        )}
+
+        {isTemplateLibraryDialogOpen && (
+          <TemplateLibraryDialog
+            onClose={handleCloseTemplateLibraryDialog}
+            onInsertUmlClass={handleInsertUmlClassTemplate}
+            onInsertUmlDiagram={handleInsertUmlDiagramTemplate}
           />
         )}
 

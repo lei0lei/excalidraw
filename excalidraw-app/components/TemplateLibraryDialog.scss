@@ -1,0 +1,358 @@
+.TemplateLibraryDialog__dialog {
+  width: min(720px, calc(100vw - 40px));
+}
+
+.TemplateLibraryDialog {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  min-height: 360px;
+  gap: 0;
+  background: var(--island-bg-color);
+}
+
+.TemplateLibraryDialog__sidebar {
+  border-right: 1px solid var(--sidebar-border-color);
+  padding: 12px;
+}
+
+.TemplateLibraryDialog__category {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary-color);
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.TemplateLibraryDialog__category[data-active="true"] {
+  background: var(--button-gray-1);
+  font-weight: 600;
+}
+
+.TemplateLibraryDialog__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px;
+  gap: 16px;
+}
+
+.TemplateLibraryDialog__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.TemplateLibraryDialog__card {
+  border: 1px solid var(--sidebar-border-color);
+  background: var(--island-bg-color);
+  border-radius: 14px;
+  padding: 14px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.TemplateLibraryDialog__card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.TemplateLibraryDialog__cardPreview {
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.08);
+  padding: 14px;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.TemplateLibraryDialog__umlBox {
+  width: 180px;
+  border: 1.5px solid #111827;
+  background: #fff;
+  color: #111827;
+}
+
+.TemplateLibraryDialog__umlTitle,
+.TemplateLibraryDialog__umlBody {
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-line;
+}
+
+.TemplateLibraryDialog__umlTitle {
+  text-align: center;
+  font-weight: 600;
+}
+
+.TemplateLibraryDialog__umlStereotype {
+  font-weight: 500;
+  opacity: 0.78;
+}
+
+.TemplateLibraryDialog__umlActorPreview {
+  position: relative;
+  width: 90px;
+  height: 120px;
+}
+
+.TemplateLibraryDialog__umlActorHead,
+.TemplateLibraryDialog__umlUseCasePreview,
+.TemplateLibraryDialog__umlPackagePreview,
+.TemplateLibraryDialog__umlNotePreview,
+.TemplateLibraryDialog__umlComponentPreview {
+  border: 1.5px solid #111827;
+  color: #111827;
+}
+
+.TemplateLibraryDialog__umlActorHead {
+  position: absolute;
+  top: 0;
+  left: 31px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.TemplateLibraryDialog__umlActorBody,
+.TemplateLibraryDialog__umlActorArms,
+.TemplateLibraryDialog__umlActorLegLeft,
+.TemplateLibraryDialog__umlActorLegRight {
+  position: absolute;
+  background: #111827;
+  transform-origin: top center;
+}
+
+.TemplateLibraryDialog__umlActorBody {
+  top: 28px;
+  left: 44px;
+  width: 1.5px;
+  height: 44px;
+}
+
+.TemplateLibraryDialog__umlActorArms {
+  top: 44px;
+  left: 18px;
+  width: 56px;
+  height: 1.5px;
+}
+
+.TemplateLibraryDialog__umlActorLegLeft {
+  top: 71px;
+  left: 44px;
+  width: 1.5px;
+  height: 34px;
+  transform: rotate(35deg);
+}
+
+.TemplateLibraryDialog__umlActorLegRight {
+  top: 71px;
+  left: 44px;
+  width: 1.5px;
+  height: 34px;
+  transform: rotate(-35deg);
+}
+
+.TemplateLibraryDialog__umlUseCasePreview {
+  width: 170px;
+  height: 86px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.TemplateLibraryDialog__umlPackagePreview {
+  position: relative;
+  width: 180px;
+  height: 116px;
+}
+
+.TemplateLibraryDialog__umlPackageTab {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 68px;
+  height: 22px;
+  border: 1.5px solid #111827;
+  border-bottom: 0;
+}
+
+.TemplateLibraryDialog__umlPackageBody {
+  position: absolute;
+  left: 0;
+  top: 20px;
+  width: 180px;
+  height: 96px;
+  border: 1.5px solid #111827;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.TemplateLibraryDialog__umlNotePreview {
+  position: relative;
+  width: 150px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.TemplateLibraryDialog__umlNoteFold {
+  position: absolute;
+  right: -1.5px;
+  top: -1.5px;
+  width: 28px;
+  height: 28px;
+  border-left: 1.5px solid #111827;
+  border-bottom: 1.5px solid #111827;
+  background: linear-gradient(
+    135deg,
+    transparent 49%,
+    #111827 50%,
+    transparent 51%
+  );
+}
+
+.TemplateLibraryDialog__umlComponentPreview {
+  position: relative;
+  width: 170px;
+  height: 94px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.TemplateLibraryDialog__umlComponentPort {
+  position: absolute;
+  left: 12px;
+  width: 18px;
+  height: 12px;
+  border: 1.5px solid #111827;
+  background: #fff;
+}
+
+.TemplateLibraryDialog__umlComponentPort--top {
+  top: 18px;
+}
+
+.TemplateLibraryDialog__umlComponentPort--bottom {
+  top: 40px;
+}
+
+.TemplateLibraryDialog__umlDivider {
+  height: 1px;
+  background: #334155;
+}
+
+.TemplateLibraryDialog__umlRelationPreview {
+  position: relative;
+  width: 180px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.TemplateLibraryDialog__umlRelationLine {
+  position: relative;
+  width: 150px;
+  height: 0;
+  border-top: 1.5px solid #111827;
+}
+
+.TemplateLibraryDialog__umlRelationLine--inheritance::after,
+.TemplateLibraryDialog__umlRelationLine--dependency::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: -7px;
+  width: 12px;
+  height: 12px;
+  border-top: 1.5px solid #111827;
+  border-right: 1.5px solid #111827;
+  transform: rotate(45deg);
+}
+
+.TemplateLibraryDialog__umlRelationLine--aggregation::before,
+.TemplateLibraryDialog__umlRelationLine--composition::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: -6px;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid #111827;
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+.TemplateLibraryDialog__umlRelationLine--composition::before {
+  background: #111827;
+}
+
+.TemplateLibraryDialog__umlRelationLine--dependency {
+  border-top-style: dashed;
+}
+
+.TemplateLibraryDialog__umlSequencePreview {
+  position: relative;
+  width: 140px;
+  height: 116px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.TemplateLibraryDialog__umlSequenceHeader {
+  width: 120px;
+  border: 1.5px solid #111827;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.TemplateLibraryDialog__umlSequenceLine {
+  width: 0;
+  height: 72px;
+  margin-top: 6px;
+  border-left: 1.5px dashed #111827;
+}
+
+.TemplateLibraryDialog__cardTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary-color);
+}
+
+.TemplateLibraryDialog__cardDescription {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-primary-color);
+  opacity: 0.72;
+}
+
+.TemplateLibraryDialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+}

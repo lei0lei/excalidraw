@@ -42,6 +42,18 @@ import "./MobileToolBar.scss";
 
 import type { AppClassProperties, ToolType, UIAppState } from "../types";
 
+const templateLibraryToolIcon = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M5.25 5.25h13.5v13.5H5.25zM8.75 5.25v13.5M8.75 10.5h10M8.75 15.25h10"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const SHAPE_TOOLS = [
   {
     type: "rectangle",
@@ -459,6 +471,22 @@ export const MobileToolBar = ({
             }
           >
             Code block
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() =>
+              app.setActiveTool({
+                type: "custom",
+                customType: "template-library",
+              })
+            }
+            icon={templateLibraryToolIcon}
+            data-testid="toolbar-template-library"
+            selected={
+              app.state.activeTool.type === "custom" &&
+              app.state.activeTool.customType === "template-library"
+            }
+          >
+            Template library
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}

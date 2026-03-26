@@ -115,6 +115,17 @@ const mathFormulaToolIcon = (
 );
 
 const codeBlockToolIcon = codeIcon;
+const templateLibraryToolIcon = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M5.25 5.25h13.5v13.5H5.25zM8.75 5.25v13.5M8.75 10.5h10M8.75 15.25h10"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 export const canChangeStrokeColor = (
   appState: UIAppState,
@@ -1094,6 +1105,9 @@ export const ShapesSwitcher = ({
     activeTool.type === "custom" && activeTool.customType === "math-formula";
   const codeBlockToolSelected =
     activeTool.type === "custom" && activeTool.customType === "code-block";
+  const templateLibraryToolSelected =
+    activeTool.type === "custom" &&
+    activeTool.customType === "template-library";
 
   const { TTDDialogTriggerTunnel } = useTunnels();
 
@@ -1228,6 +1242,8 @@ export const ShapesSwitcher = ({
             ? mathFormulaToolIcon
             : codeBlockToolSelected
             ? codeBlockToolIcon
+            : templateLibraryToolSelected
+            ? templateLibraryToolIcon
             : laserToolSelected && !app.props.isCollaborating
             ? laserPointerToolIcon
             : lassoToolSelected
@@ -1275,6 +1291,19 @@ export const ShapesSwitcher = ({
             selected={codeBlockToolSelected}
           >
             Code block
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() =>
+              app.setActiveTool({
+                type: "custom",
+                customType: "template-library",
+              })
+            }
+            icon={templateLibraryToolIcon}
+            data-testid="toolbar-template-library"
+            selected={templateLibraryToolSelected}
+          >
+            Template library
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}

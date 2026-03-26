@@ -1,0 +1,128 @@
+.UmlClassSidebar {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.UmlClassSidebar__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.UmlClassSidebar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.UmlClassSidebar__sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.UmlClassSidebar__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary-color);
+}
+
+.UmlClassSidebar__input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--sidebar-border-color);
+  border-radius: 10px;
+  background: var(--input-bg-color, var(--island-bg-color));
+  color: var(--text-primary-color);
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.UmlClassSidebar__input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.UmlClassSidebar__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.UmlClassSidebar__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.UmlClassSidebar__input--row {
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.UmlClassSidebar__iconButton,
+.UmlClassSidebar__addButton {
+  box-sizing: border-box;
+  border: 1px solid var(--sidebar-border-color);
+  background: var(--island-bg-color);
+  color: var(--text-primary-color);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.UmlClassSidebar__iconButton:hover,
+.UmlClassSidebar__addButton:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.UmlClassSidebar__iconButton {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.UmlClassSidebar__addButton {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.UmlClassSidebar__empty {
+  border: 1px dashed var(--sidebar-border-color);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 13px;
+  opacity: 0.68;
+}
