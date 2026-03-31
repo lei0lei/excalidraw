@@ -10,6 +10,7 @@ import {
 } from "@excalidraw/common";
 
 import {
+  isEmbeddableElement,
   shouldAllowVerticalAlign,
   suppportsHorizontalAlign,
   hasBoundTextElement,
@@ -160,6 +161,23 @@ export const canChangeBackgroundColor = (
   );
 };
 
+const isMathFormulaEmbeddable = (element: ExcalidrawElement) => {
+  if (!isEmbeddableElement(element)) {
+    return false;
+  }
+
+  const customData = element.customData as
+    | {
+        formulaType?: string;
+      }
+    | undefined;
+
+  return (
+    element.link?.startsWith("math://formula/") === true ||
+    customData?.formulaType === "math"
+  );
+};
+
 export const SelectedShapeActions = ({
   appState,
   elementsMap,
@@ -211,6 +229,44 @@ export const SelectedShapeActions = ({
 
   const showAlignActions =
     !isSingleElementBoundContainer && alignActionsPredicate(appState, app);
+  const isSingleMathFormulaSelection =
+    targetElements.length === 1 && isMathFormulaEmbeddable(targetElements[0]);
+
+  if (isSingleMathFormulaSelection) {
+    return (
+      <div className="selected-shape-actions">
+        <div>{renderAction("changeStrokeColor")}</div>
+        <div>{renderAction("changeBackgroundColor")}</div>
+        {renderAction("changeFillStyle")}
+        {renderAction("changeStrokeWidth")}
+        {renderAction("changeStrokeStyle")}
+        {renderAction("changeSloppiness")}
+        {renderAction("changeFontSize")}
+        {renderAction("changeOpacity")}
+
+        <fieldset>
+          <legend>{t("labels.layers")}</legend>
+          <div className="buttonList">
+            {renderAction("sendToBack")}
+            {renderAction("sendBackward")}
+            {renderAction("bringForward")}
+            {renderAction("bringToFront")}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>{t("labels.actions")}</legend>
+          <div className="buttonList">
+            {editorInterface.formFactor !== "phone" &&
+              renderAction("duplicateSelection")}
+            {editorInterface.formFactor !== "phone" &&
+              renderAction("deleteSelectedElements")}
+            {renderAction("hyperlink")}
+          </div>
+        </fieldset>
+      </div>
+    );
+  }
 
   return (
     <div className="selected-shape-actions">
@@ -1279,8 +1335,9 @@ export const ShapesSwitcher = ({
             icon={mathFormulaToolIcon}
             data-testid="toolbar-math-formula"
             selected={mathFormulaToolSelected}
+            shortcut="Shift+M"
           >
-            Math formula
+            {t("toolBar.mathFormula")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() =>
@@ -1290,7 +1347,7 @@ export const ShapesSwitcher = ({
             data-testid="toolbar-code-block"
             selected={codeBlockToolSelected}
           >
-            Code block
+            {t("toolBar.codeBlock")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() =>
@@ -1303,7 +1360,7 @@ export const ShapesSwitcher = ({
             data-testid="toolbar-template-library"
             selected={templateLibraryToolSelected}
           >
-            Template library
+            {t("toolBar.templateLibrary")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}
@@ -1325,7 +1382,7 @@ export const ShapesSwitcher = ({
             </DropdownMenu.Item>
           )}
           <div style={{ margin: "6px 0", fontSize: 14, fontWeight: 600 }}>
-            Generate
+            {t("labels.generate")}
           </div>
           {app.props.aiEnabled !== false && <TTDDialogTriggerTunnel.Out />}
           <DropdownMenu.Item

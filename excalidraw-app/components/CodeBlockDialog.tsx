@@ -131,7 +131,7 @@ export const CodeBlockDialog = ({
     event?.preventDefault();
 
     if (!code.trim()) {
-      setSubmitError("Code cannot be empty.");
+      setSubmitError(t("codeBlock.errors.empty"));
       return;
     }
 
@@ -142,7 +142,9 @@ export const CodeBlockDialog = ({
       await onSubmit(code.replace(/\r\n/g, "\n"), style);
     } catch (error) {
       setSubmitError(
-        error instanceof Error ? error.message : "Failed to save code block.",
+        error instanceof Error
+          ? error.message
+          : t("codeBlock.errors.saveFailed"),
       );
     } finally {
       setIsSubmitting(false);
@@ -166,7 +168,9 @@ export const CodeBlockDialog = ({
     <Dialog
       size="regular"
       className="CodeBlockDialog__dialog"
-      title={mode === "edit" ? "Code block" : "New code block"}
+      title={
+        mode === "edit" ? t("codeBlock.titleEdit") : t("codeBlock.titleNew")
+      }
       onCloseRequest={onClose}
       autofocus={false}
       closeOnClickOutside={true}
@@ -177,7 +181,9 @@ export const CodeBlockDialog = ({
       >
         <div className="CodeBlockDialog__toolbar">
           <div className="CodeBlockDialog__toolbarGroup">
-            <span className="CodeBlockDialog__toolbarHint">Language</span>
+            <span className="CodeBlockDialog__toolbarHint">
+              {t("labels.language")}
+            </span>
             <select
               className="CodeBlockDialog__select"
               value={style.language}
@@ -197,7 +203,9 @@ export const CodeBlockDialog = ({
           </div>
 
           <div className="CodeBlockDialog__toolbarGroup">
-            <span className="CodeBlockDialog__toolbarHint">Size</span>
+            <span className="CodeBlockDialog__toolbarHint">
+              {t("codeBlock.size")}
+            </span>
             <div className="CodeBlockDialog__sizeOptions">
               {FONT_SIZE_PRESETS.map((preset) => (
                 <button
@@ -216,7 +224,10 @@ export const CodeBlockDialog = ({
           </div>
 
           <div className="CodeBlockDialog__toggleGroup">
-            <label className="CodeBlockDialog__toggle" title="Wrap long lines">
+            <label
+              className="CodeBlockDialog__toggle"
+              title={t("codeBlock.wrapLongLines")}
+            >
               <input
                 type="checkbox"
                 checked={style.wrap}
@@ -224,12 +235,12 @@ export const CodeBlockDialog = ({
                   setStyle((prev) => ({ ...prev, wrap: event.target.checked }))
                 }
               />
-              <span>Wrap</span>
+              <span>{t("codeBlock.wrap")}</span>
             </label>
 
             <label
               className="CodeBlockDialog__toggle"
-              title="Show line numbers"
+              title={t("codeBlock.showLineNumbers")}
             >
               <input
                 type="checkbox"
@@ -241,18 +252,20 @@ export const CodeBlockDialog = ({
                   }))
                 }
               />
-              <span>Line #</span>
+              <span>{t("codeBlock.lineNumbers")}</span>
             </label>
           </div>
         </div>
 
         <div className="CodeBlockDialog__highlights">
-          <div className="CodeBlockDialog__highlightsHeader">Highlights</div>
+          <div className="CodeBlockDialog__highlightsHeader">
+            {t("codeBlock.highlights")}
+          </div>
           <div className="CodeBlockDialog__highlightsControls">
             <input
               className="CodeBlockDialog__textInput"
               type="text"
-              placeholder="3,5-8,12"
+              placeholder={t("codeBlock.highlightPlaceholder")}
               value={style.highlightSpec}
               onChange={(event) =>
                 setStyle((prev) => ({
@@ -416,7 +429,9 @@ export const CodeBlockDialog = ({
         )}
 
         <div className="CodeBlockDialog__actions">
-          <div className="CodeBlockDialog__hint">Ctrl/Cmd + Enter</div>
+          <div className="CodeBlockDialog__hint">
+            {t("codeBlock.shortcutHint")}
+          </div>
           <DialogActionButton
             label={t("buttons.cancel")}
             onClick={onClose}
@@ -424,7 +439,9 @@ export const CodeBlockDialog = ({
             style={{ marginRight: 10 }}
           />
           <DialogActionButton
-            label={mode === "edit" ? "Update" : "Insert"}
+            label={
+              mode === "edit" ? t("codeBlock.update") : t("codeBlock.insert")
+            }
             type="submit"
             actionType="primary"
             isLoading={isSubmitting}

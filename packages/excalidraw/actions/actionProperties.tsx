@@ -46,6 +46,7 @@ import {
 import {
   isArrowElement,
   isBoundToContainer,
+  isEmbeddableElement,
   isElbowArrow,
   isLinearElement,
   isLineElement,
@@ -162,6 +163,52 @@ const getStylesPanelInfo = (app: AppClassProperties) => {
     isCompact: stylesPanelMode !== "full",
     isMobile: stylesPanelMode === "mobile",
   } as const;
+};
+
+const getMathFormulaFontSize = (element: ExcalidrawElement) => {
+  if (!isEmbeddableElement(element)) {
+    return null;
+  }
+
+  const customData = element.customData as
+    | {
+        formulaType?: string;
+        formulaStyle?: {
+          fontSize?: number;
+        };
+      }
+    | undefined;
+
+  if (customData?.formulaType !== "math") {
+    return null;
+  }
+
+  const fontSize = customData.formulaStyle?.fontSize;
+  return typeof fontSize === "number" && Number.isFinite(fontSize)
+    ? fontSize
+    : null;
+};
+
+const getMathFormulaStyle = (element: ExcalidrawElement) => {
+  if (!isEmbeddableElement(element)) {
+    return null;
+  }
+
+  const customData = element.customData as
+    | {
+        formulaType?: string;
+        formulaStyle?: {
+          fontSize?: number;
+          color?: string;
+        };
+      }
+    | undefined;
+
+  if (customData?.formulaType !== "math") {
+    return null;
+  }
+
+  return customData.formulaStyle || {};
 };
 
 export const changeProperty = (
@@ -282,6 +329,25 @@ const changeFontSize = (
 
         return newElement;
       }
+      const mathFormulaStyle = getMathFormulaStyle(oldElement);
+      if (mathFormulaStyle) {
+        const nextFontSize = getNewFontSize({
+          ...oldElement,
+          type: "text",
+          fontSize: mathFormulaStyle.fontSize ?? appState.currentItemFontSize,
+        } as ExcalidrawTextElement);
+        newFontSizes.add(nextFontSize);
+        return newElementWith(oldElement, {
+          customData: {
+            ...(oldElement.customData || {}),
+            formulaType: "math",
+            formulaStyle: {
+              ...mathFormulaStyle,
+              fontSize: nextFontSize,
+            },
+          },
+        });
+      }
       return oldElement;
     },
     true,
@@ -326,6 +392,19 @@ export const actionChangeStrokeColor = register<
           elements,
           appState,
           (el) => {
+            const mathFormulaStyle = getMathFormulaStyle(el);
+            if (mathFormulaStyle) {
+              return newElementWith(el, {
+                customData: {
+                  ...(el.customData || {}),
+                  formulaType: "math",
+                  formulaStyle: {
+                    ...mathFormulaStyle,
+                    color: value.currentItemStrokeColor,
+                  },
+                },
+              });
+            }
             return hasStrokeColor(el.type)
               ? newElementWith(el, {
                   strokeColor: value.currentItemStrokeColor,
@@ -360,7 +439,8 @@ export const actionChangeStrokeColor = register<
           color={getFormValue(
             elements,
             app,
-            (element) => element.strokeColor,
+            (element) =>
+              getMathFormulaStyle(element)?.color || element.strokeColor,
             true,
             (hasSelection) =>
               !hasSelection ? appState.currentItemStrokeColor : null,
@@ -794,6 +874,10 @@ export const actionChangeFontSize = register<ExcalidrawTextElement["fontSize"]>(
                   if (isTextElement(element)) {
                     return element.fontSize;
                   }
+                  const mathFormulaFontSize = getMathFormulaFontSize(element);
+                  if (mathFormulaFontSize !== null) {
+                    return mathFormulaFontSize;
+                  }
                   const boundTextElement = getBoundTextElement(
                     element,
                     app.scene.getNonDeletedElementsMap(),
@@ -805,6 +889,7 @@ export const actionChangeFontSize = register<ExcalidrawTextElement["fontSize"]>(
                 },
                 (element) =>
                   isTextElement(element) ||
+                  getMathFormulaFontSize(element) !== null ||
                   getBoundTextElement(
                     element,
                     app.scene.getNonDeletedElementsMap(),

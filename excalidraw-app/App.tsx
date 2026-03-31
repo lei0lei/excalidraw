@@ -504,6 +504,17 @@ const getMathFormulaElementData = (
   };
 };
 
+const resolveMathFormulaColorFromSidebar = (
+  color: string | null | undefined,
+  editorTheme: "light" | "dark",
+) => {
+  const normalized = (color || "").trim().toLowerCase();
+  if (!normalized || normalized === "transparent") {
+    return editorTheme === THEME.DARK ? "#e8ecff" : "#1d1d3a";
+  }
+  return color!;
+};
+
 const getCodeBlockElementData = (
   element: NonDeletedExcalidrawElement | null,
 ): {
@@ -946,18 +957,26 @@ const ExcalidrawWrapper = () => {
   const handleInsertMathFormulaAtPointer = useCallback(
     (sceneX: number, sceneY: number, activeTool: AppState["activeTool"]) => {
       if (!excalidrawAPI) {
-        throw new Error("Excalidraw editor is not ready yet.");
+        throw new Error(t("mathFormula.errors.editorNotReady"));
       }
+      const appState =
+        currentAppStateRef.current || excalidrawAPI.getAppState();
 
       setMathFormulaDialogState({
         mode: "insert",
         sceneX,
         sceneY,
-        initialStyle: normalizeMathFormulaStyle(),
+        initialStyle: normalizeMathFormulaStyle({
+          fontSize: appState.currentItemFontSize,
+          color: resolveMathFormulaColorFromSidebar(
+            appState.currentItemStrokeColor,
+            editorTheme,
+          ),
+        }),
         toolLocked: activeTool.locked,
       });
     },
-    [excalidrawAPI],
+    [editorTheme, excalidrawAPI],
   );
 
   const handleEditMathFormula = useCallback(
@@ -966,16 +985,26 @@ const ExcalidrawWrapper = () => {
       if (!mathFormulaData) {
         return;
       }
+      const appState =
+        currentAppStateRef.current || excalidrawAPI?.getAppState();
 
       setMathFormulaDialogState({
         mode: "edit",
         targetElementId: element.id,
         initialValue: mathFormulaData.source,
-        initialStyle: mathFormulaData.style,
+        initialStyle: normalizeMathFormulaStyle({
+          ...mathFormulaData.style,
+          fontSize:
+            appState?.currentItemFontSize ?? mathFormulaData.style.fontSize,
+          color: resolveMathFormulaColorFromSidebar(
+            appState?.currentItemStrokeColor ?? mathFormulaData.style.color,
+            editorTheme,
+          ),
+        }),
       });
       excalidrawAPI?.setActiveTool({ type: "selection" });
     },
-    [excalidrawAPI],
+    [editorTheme, excalidrawAPI],
   );
 
   const handleCloseMathFormulaDialog = useCallback(() => {
@@ -1002,14 +1031,24 @@ const ExcalidrawWrapper = () => {
       const normalizedFormula = formula.trim();
 
       if (!normalizedFormula) {
-        throw new Error("Formula cannot be empty.");
+        throw new Error(t("mathFormula.errors.empty"));
       }
+      const appState =
+        currentAppStateRef.current || excalidrawAPI.getAppState();
+      const sidebarMathStyle = normalizeMathFormulaStyle({
+        ...style,
+        fontSize: appState.currentItemFontSize,
+        color: resolveMathFormulaColorFromSidebar(
+          appState.currentItemStrokeColor,
+          editorTheme,
+        ),
+      });
 
       const {
         width,
         height,
         style: normalizedStyle,
-      } = measureMathFormulaDimensions(normalizedFormula, style);
+      } = measureMathFormulaDimensions(normalizedFormula, sidebarMathStyle);
 
       const formulaCustomData = {
         formulaSource: normalizedFormula,
@@ -1026,7 +1065,7 @@ const ExcalidrawWrapper = () => {
         );
 
         if (!targetElement) {
-          throw new Error("Original formula element was not found.");
+          throw new Error(t("mathFormula.errors.originalNotFound"));
         }
 
         const centerX = targetElement.x + targetElement.width / 2;
@@ -1061,7 +1100,7 @@ const ExcalidrawWrapper = () => {
             customData: formulaCustomData,
           });
         } else {
-          throw new Error("Original formula element was not found.");
+          throw new Error(t("mathFormula.errors.originalNotFound"));
         }
 
         excalidrawAPI.updateScene({
@@ -1078,7 +1117,7 @@ const ExcalidrawWrapper = () => {
 
         setMathFormulaDialogState(null);
         excalidrawAPI.setToast({
-          message: "Updated math formula",
+          message: t("mathFormula.toast.updated"),
         });
         return;
       }
@@ -1087,7 +1126,7 @@ const ExcalidrawWrapper = () => {
         typeof dialogState.sceneX !== "number" ||
         typeof dialogState.sceneY !== "number"
       ) {
-        throw new Error("Formula insertion position is missing.");
+        throw new Error(t("mathFormula.errors.positionMissing"));
       }
 
       let embeddableElement = newEmbeddableElement({
@@ -1131,10 +1170,10 @@ const ExcalidrawWrapper = () => {
       }
 
       excalidrawAPI.setToast({
-        message: "Inserted math formula",
+        message: t("mathFormula.toast.inserted"),
       });
     },
-    [excalidrawAPI, mathFormulaDialogState],
+    [editorTheme, excalidrawAPI, mathFormulaDialogState],
   );
 
   const handleInsertCodeBlockAtPointer = useCallback(
@@ -1186,7 +1225,7 @@ const ExcalidrawWrapper = () => {
   const handleSubmitCodeBlock = useCallback(
     async (code: string, style: CodeBlockStyle) => {
       if (!excalidrawAPI) {
-        throw new Error("Excalidraw editor is not ready yet.");
+        throw new Error(t("codeBlock.errors.editorNotReady"));
       }
 
       const dialogState = codeBlockDialogState;
@@ -1198,7 +1237,7 @@ const ExcalidrawWrapper = () => {
       const normalizedCode = code.replace(/\r\n/g, "\n").trimEnd();
 
       if (!normalizedCode.trim()) {
-        throw new Error("Code cannot be empty.");
+        throw new Error(t("codeBlock.errors.empty"));
       }
 
       const {
@@ -1222,7 +1261,7 @@ const ExcalidrawWrapper = () => {
         );
 
         if (!targetElement || !isEmbeddableElement(targetElement)) {
-          throw new Error("Original code block element was not found.");
+          throw new Error(t("codeBlock.errors.originalNotFound"));
         }
 
         const updatedElement = newElementWith(targetElement, {
@@ -1246,7 +1285,7 @@ const ExcalidrawWrapper = () => {
 
         setCodeBlockDialogState(null);
         excalidrawAPI.setToast({
-          message: "Updated code block",
+          message: t("codeBlock.toast.updated"),
         });
         return;
       }
@@ -1255,7 +1294,7 @@ const ExcalidrawWrapper = () => {
         typeof dialogState.sceneX !== "number" ||
         typeof dialogState.sceneY !== "number"
       ) {
-        throw new Error("Code block insertion position is missing.");
+        throw new Error(t("codeBlock.errors.positionMissing"));
       }
 
       let embeddableElement = newEmbeddableElement({
@@ -1300,11 +1339,67 @@ const ExcalidrawWrapper = () => {
       }
 
       excalidrawAPI.setToast({
-        message: "Inserted code block",
+        message: t("codeBlock.toast.inserted"),
       });
     },
     [codeBlockDialogState, excalidrawAPI],
   );
+
+  useEffect(() => {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    const handleMathToolShortcut = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() !== "m" ||
+        !event.shiftKey ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.repeat
+      ) {
+        return;
+      }
+
+      if (
+        mathFormulaDialogState ||
+        codeBlockDialogState ||
+        isTemplateLibraryDialogOpen
+      ) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const targetTagName = target?.tagName;
+      if (
+        target?.isContentEditable ||
+        targetTagName === "INPUT" ||
+        targetTagName === "TEXTAREA" ||
+        targetTagName === "SELECT" ||
+        targetTagName === "BUTTON"
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      excalidrawAPI.setActiveTool({
+        type: "custom",
+        customType: "math-formula",
+      });
+    };
+
+    window.addEventListener("keydown", handleMathToolShortcut);
+
+    return () => {
+      window.removeEventListener("keydown", handleMathToolShortcut);
+    };
+  }, [
+    codeBlockDialogState,
+    excalidrawAPI,
+    isTemplateLibraryDialogOpen,
+    mathFormulaDialogState,
+  ]);
 
   useEffect(() => {
     templateLibraryDialogOpenRef.current = isTemplateLibraryDialogOpen;
@@ -3389,6 +3484,19 @@ const ExcalidrawWrapper = () => {
               ],
               perform: () => {
                 setAppMode("workspace");
+              },
+            },
+            {
+              label: t("toolBar.mathFormula"),
+              category: DEFAULT_CATEGORIES.tools,
+              predicate: true,
+              shortcut: "Shift+M",
+              keywords: ["math", "formula", "equation", "latex", "katex"],
+              perform: () => {
+                excalidrawAPI?.setActiveTool({
+                  type: "custom",
+                  customType: "math-formula",
+                });
               },
             },
             {

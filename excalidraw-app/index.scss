@@ -345,6 +345,176 @@
   background: #14182a;
 }
 
+.workspace-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  flex: 0 0 auto;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.28);
+  background: rgba(254, 226, 226, 0.92);
+  color: #7f1d1d;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.workspace-page--dark .workspace-error-banner {
+  background: rgba(127, 29, 29, 0.35);
+  border-bottom-color: rgba(248, 113, 113, 0.35);
+  color: #fecaca;
+}
+
+.workspace-error-banner__message {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.workspace-error-banner__dismiss {
+  flex: 0 0 auto;
+  width: 1.65rem;
+  height: 1.65rem;
+  margin: -0.15rem 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  opacity: 0.85;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.06);
+  }
+}
+
+.workspace-page--dark .workspace-error-banner__dismiss:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.workspace-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 18, 32, 0.45);
+}
+
+.workspace-modal {
+  width: min(26rem, 100%);
+  max-height: min(90vh, 100%);
+  overflow: auto;
+  padding: 1.15rem 1.2rem 1.2rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(98, 94, 224, 0.2);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 20px 48px rgba(16, 24, 40, 0.22);
+  color: #1d1d3a;
+}
+
+.workspace-page--dark .workspace-modal {
+  background: rgba(22, 26, 42, 0.98);
+  border-color: rgba(98, 94, 224, 0.28);
+  color: #f4f5ff;
+}
+
+.workspace-modal__title {
+  margin: 0 0 0.85rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.workspace-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.workspace-modal__label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.workspace-modal__label-text {
+  opacity: 0.88;
+}
+
+.workspace-modal__input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(98, 94, 224, 0.22);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.95);
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+
+  &:focus {
+    outline: 2px solid rgba(98, 94, 224, 0.45);
+    outline-offset: 1px;
+  }
+}
+
+.workspace-page--dark .workspace-modal__input {
+  background: rgba(14, 16, 29, 0.85);
+  border-color: rgba(98, 94, 224, 0.35);
+}
+
+.workspace-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.workspace-modal__button {
+  min-width: 5rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.55rem;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}
+
+.workspace-modal__button--secondary {
+  border-color: rgba(98, 94, 224, 0.22);
+  background: transparent;
+  color: inherit;
+
+  &:hover:not(:disabled) {
+    background: rgba(98, 94, 224, 0.08);
+  }
+}
+
+.workspace-modal__button--primary {
+  border-color: rgba(98, 94, 224, 0.35);
+  background: #625ee0;
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.05);
+  }
+}
+
 .workspace-topbar__select {
   min-width: 8.5rem;
   max-width: 11.5rem;
@@ -1072,52 +1242,6 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 0.125rem;
-}
-
-.workspace-floating-notice {
-  position: absolute;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 12;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  max-width: min(30rem, calc(100vw - 2rem));
-  padding: 0.85rem 0.95rem;
-  border: 1px solid rgba(239, 68, 68, 0.24);
-  border-radius: 0.9rem;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 16px 40px rgba(16, 24, 40, 0.18);
-}
-
-.workspace-page--dark .workspace-floating-notice {
-  background: rgba(20, 24, 42, 0.98);
-  border-color: rgba(248, 113, 113, 0.28);
-}
-
-.workspace-floating-notice__message {
-  min-width: 0;
-  font-size: 0.8125rem;
-  line-height: 1.45;
-  word-break: break-word;
-}
-
-.workspace-floating-notice__close {
-  flex: 0 0 auto;
-  width: 1.75rem;
-  height: 1.75rem;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  font-size: 1rem;
-  line-height: 1;
-
-  &:hover {
-    background: rgba(98, 94, 224, 0.08);
-  }
 }
 
 .workspace-file-card__name {

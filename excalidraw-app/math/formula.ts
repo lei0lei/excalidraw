@@ -134,6 +134,33 @@ export const renderMathFormulaMarkup = (
   style?: Partial<MathFormulaStyle> | null,
 ) => renderMathFormula(formula, style, "htmlAndMathml");
 
+export const getMathFormulaParseError = (formula: string) => {
+  const normalizedFormula = formula.trim();
+  if (!normalizedFormula) {
+    return null;
+  }
+
+  try {
+    katex.renderToString(normalizedFormula, {
+      displayMode: false,
+      output: "htmlAndMathml",
+      throwOnError: true,
+      strict: "ignore",
+    });
+    return null;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Invalid math formula.";
+    const positionMatch = message.match(/at position (\d+)/i);
+    const position = positionMatch ? Number(positionMatch[1]) : null;
+
+    return {
+      message,
+      position: Number.isFinite(position) ? position : null,
+    };
+  }
+};
+
 export const renderMathFormulaExportMarkup = (
   formula: string,
   style?: Partial<MathFormulaStyle> | null,

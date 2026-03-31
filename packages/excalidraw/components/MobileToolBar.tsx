@@ -54,6 +54,18 @@ const templateLibraryToolIcon = (
   </svg>
 );
 
+const mathFormulaToolIcon = (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M5 7l4 5-4 5M12 7h7M12 12h7M12 17h7"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const SHAPE_TOOLS = [
   {
     type: "rectangle",
@@ -135,6 +147,8 @@ export const MobileToolBar = ({
   const frameToolSelected = activeTool.type === "frame";
   const laserToolSelected = activeTool.type === "laser";
   const embeddableToolSelected = activeTool.type === "embeddable";
+  const mathFormulaToolSelected =
+    activeTool.type === "custom" && activeTool.customType === "math-formula";
 
   const { TTDDialogTriggerTunnel } = useTunnels();
 
@@ -172,6 +186,7 @@ export const MobileToolBar = ({
     "text",
     "frame",
     "embeddable",
+    "math-formula",
     "laser",
     "magicframe",
   ].filter((tool) => {
@@ -186,7 +201,8 @@ export const MobileToolBar = ({
     }
     return true;
   });
-  const extraToolSelected = extraTools.includes(activeTool.type);
+  const extraToolSelected =
+    extraTools.includes(activeTool.type) || mathFormulaToolSelected;
   const extraIcon = extraToolSelected
     ? activeTool.type === "text"
       ? TextIcon
@@ -196,6 +212,8 @@ export const MobileToolBar = ({
       ? frameToolIcon
       : activeTool.type === "embeddable"
       ? EmbedIcon
+      : mathFormulaToolSelected
+      ? mathFormulaToolIcon
       : activeTool.type === "laser"
       ? laserPointerToolIcon
       : activeTool.type === "magicframe"
@@ -461,6 +479,17 @@ export const MobileToolBar = ({
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() =>
+              app.setActiveTool({ type: "custom", customType: "math-formula" })
+            }
+            icon={mathFormulaToolIcon}
+            data-testid="toolbar-math-formula"
+            selected={mathFormulaToolSelected}
+            shortcut="Shift+M"
+          >
+            {t("toolBar.mathFormula")}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() =>
               app.setActiveTool({ type: "custom", customType: "code-block" })
             }
             icon={codeIcon}
@@ -470,7 +499,7 @@ export const MobileToolBar = ({
               app.state.activeTool.customType === "code-block"
             }
           >
-            Code block
+            {t("toolBar.codeBlock")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() =>
@@ -486,7 +515,7 @@ export const MobileToolBar = ({
               app.state.activeTool.customType === "template-library"
             }
           >
-            Template library
+            {t("toolBar.templateLibrary")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}
@@ -498,7 +527,7 @@ export const MobileToolBar = ({
             {t("toolBar.laser")}
           </DropdownMenu.Item>
           <div style={{ margin: "6px 0", fontSize: 14, fontWeight: 600 }}>
-            Generate
+            {t("labels.generate")}
           </div>
           {app.props.aiEnabled !== false && <TTDDialogTriggerTunnel.Out />}
           <DropdownMenu.Item

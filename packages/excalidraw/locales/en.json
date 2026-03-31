@@ -186,7 +186,8 @@
     "preferences": "Preferences",
     "preferences_toolLock": "Tool lock",
     "arrowBinding": "Arrow binding",
-    "midpointSnapping": "Snap to midpoints"
+    "midpointSnapping": "Snap to midpoints",
+    "generate": "Generate"
   },
   "elementLink": {
     "title": "Link to object",
@@ -328,7 +329,61 @@
     "hand": "Hand (panning tool)",
     "extraTools": "More tools",
     "mermaidToExcalidraw": "Mermaid to Excalidraw",
+    "mathFormula": "Math formula",
+    "codeBlock": "Code block",
+    "templateLibrary": "Template library",
     "convertElementType": "Toggle shape type"
+  },
+  "mathFormula": {
+    "titleEdit": "Equation",
+    "titleNew": "New equation",
+    "size": "Size",
+    "displayMode": "Display mode",
+    "block": "Block",
+    "source": "Source",
+    "preview": "Preview",
+    "insert": "Insert",
+    "update": "Update",
+    "shortcutHint": "Ctrl/Cmd + Enter",
+    "tabNavigationHint": "Tab/Shift+Tab jump placeholders",
+    "useSidebarStyleHint": "Use sidebar for size/color",
+    "parseErrorAt": "Error near position {{position}}",
+    "toast": {
+      "inserted": "Inserted math formula",
+      "updated": "Updated math formula"
+    },
+    "errors": {
+      "empty": "Formula cannot be empty.",
+      "saveFailed": "Failed to save formula.",
+      "editorNotReady": "Excalidraw editor is not ready yet.",
+      "originalNotFound": "Original formula element was not found.",
+      "positionMissing": "Formula insertion position is missing."
+    }
+  },
+  "codeBlock": {
+    "titleEdit": "Code block",
+    "titleNew": "New code block",
+    "size": "Size",
+    "wrapLongLines": "Wrap long lines",
+    "wrap": "Wrap",
+    "showLineNumbers": "Show line numbers",
+    "lineNumbers": "Line #",
+    "highlights": "Highlights",
+    "highlightPlaceholder": "3,5-8,12",
+    "insert": "Insert",
+    "update": "Update",
+    "shortcutHint": "Ctrl/Cmd + Enter",
+    "toast": {
+      "inserted": "Inserted code block",
+      "updated": "Updated code block"
+    },
+    "errors": {
+      "empty": "Code cannot be empty.",
+      "saveFailed": "Failed to save code block.",
+      "editorNotReady": "Excalidraw editor is not ready yet.",
+      "originalNotFound": "Original code block element was not found.",
+      "positionMissing": "Code block insertion position is missing."
+    }
   },
   "element": {
     "rectangle": "Rectangle",
@@ -686,6 +741,27 @@
   },
   "quickSearch": {
     "placeholder": "Quick search"
+  },
+  "workspace": {
+    "backToEditor": "Back to editor",
+    "storageBackend": "Storage backend",
+    "googleDrive": "Google Drive",
+    "localDirectory": "Local directory",
+    "connectGoogleDrive": "Connect Google Drive",
+    "chooseFolder": "Choose folder",
+    "googleDriveConnected": "Google Drive connected",
+    "googleDriveNotConnected": "Google Drive not connected",
+    "localDirectoryAvailable": "Local directory available",
+    "localDirectoryUnavailable": "Local directory unavailable",
+    "dismissError": "Dismiss error",
+    "retry": "Retry",
+    "reconnect": "Reconnect",
+    "sidebarPlaceholder": "Choose a folder to start browsing files.",
+    "gridPlaceholder": "After selecting a folder, its child folders and Excalidraw files will appear here.",
+    "loadingFolderContent": "Loading folder content...",
+    "emptyFolder": "No child folders or .excalidraw files in the current folder yet.",
+    "open": "Open",
+    "previewPending": "Preview pending"
   },
   "fontList": {
     "badge": {

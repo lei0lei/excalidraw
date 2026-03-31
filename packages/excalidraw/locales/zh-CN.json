@@ -171,7 +171,8 @@
     "linkToElement": "链接到对象",
     "wrapSelectionInFrame": "用选中的元素创建画框",
     "tab": "Tab",
-    "shapeSwitch": "切换形状"
+    "shapeSwitch": "切换形状",
+    "generate": "生成"
   },
   "elementLink": {
     "title": "链接到对象",
@@ -313,7 +314,61 @@
     "hand": "抓手（平移工具）",
     "extraTools": "更多工具",
     "mermaidToExcalidraw": "Mermaid 至 Excalidraw",
+    "mathFormula": "数学公式",
+    "codeBlock": "代码块",
+    "templateLibrary": "模板库",
     "convertElementType": "切换形状种类"
+  },
+  "mathFormula": {
+    "titleEdit": "公式",
+    "titleNew": "新建公式",
+    "size": "大小",
+    "displayMode": "显示模式",
+    "block": "块级",
+    "source": "源码",
+    "preview": "预览",
+    "insert": "插入",
+    "update": "更新",
+    "shortcutHint": "Ctrl/Cmd + Enter",
+    "tabNavigationHint": "Tab/Shift+Tab 跳转占位符",
+    "useSidebarStyleHint": "字号/颜色请在侧边栏设置",
+    "parseErrorAt": "错误位置约在 {{position}}",
+    "toast": {
+      "inserted": "已插入数学公式",
+      "updated": "已更新数学公式"
+    },
+    "errors": {
+      "empty": "公式不能为空。",
+      "saveFailed": "保存公式失败。",
+      "editorNotReady": "Excalidraw 编辑器尚未就绪。",
+      "originalNotFound": "未找到原始公式元素。",
+      "positionMissing": "缺少公式插入位置。"
+    }
+  },
+  "codeBlock": {
+    "titleEdit": "代码块",
+    "titleNew": "新建代码块",
+    "size": "大小",
+    "wrapLongLines": "自动换行长行",
+    "wrap": "换行",
+    "showLineNumbers": "显示行号",
+    "lineNumbers": "行号",
+    "highlights": "高亮",
+    "highlightPlaceholder": "3,5-8,12",
+    "insert": "插入",
+    "update": "更新",
+    "shortcutHint": "Ctrl/Cmd + Enter",
+    "toast": {
+      "inserted": "已插入代码块",
+      "updated": "已更新代码块"
+    },
+    "errors": {
+      "empty": "代码不能为空。",
+      "saveFailed": "保存代码块失败。",
+      "editorNotReady": "Excalidraw 编辑器尚未就绪。",
+      "originalNotFound": "未找到原始代码块元素。",
+      "positionMissing": "缺少代码块插入位置。"
+    }
   },
   "element": {
     "rectangle": "矩形",
@@ -666,6 +721,27 @@
   },
   "quickSearch": {
     "placeholder": "快速搜索"
+  },
+  "workspace": {
+    "backToEditor": "返回编辑器",
+    "storageBackend": "存储后端",
+    "googleDrive": "Google Drive",
+    "localDirectory": "本地目录",
+    "connectGoogleDrive": "连接 Google Drive",
+    "chooseFolder": "选择文件夹",
+    "googleDriveConnected": "Google Drive 已连接",
+    "googleDriveNotConnected": "Google Drive 未连接",
+    "localDirectoryAvailable": "本地目录可用",
+    "localDirectoryUnavailable": "本地目录不可用",
+    "dismissError": "关闭错误",
+    "retry": "重试",
+    "reconnect": "重新连接",
+    "sidebarPlaceholder": "请选择一个文件夹开始浏览。",
+    "gridPlaceholder": "选择文件夹后，这里将显示其子文件夹和 Excalidraw 文件。",
+    "loadingFolderContent": "正在加载文件夹内容...",
+    "emptyFolder": "当前文件夹下还没有子文件夹或 .excalidraw 文件。",
+    "open": "打开",
+    "previewPending": "预览生成中"
   },
   "fontList": {
     "badge": {
