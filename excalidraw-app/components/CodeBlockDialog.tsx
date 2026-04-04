@@ -1,6 +1,6 @@
 import { KEYS } from "@excalidraw/common";
 import { Dialog } from "@excalidraw/excalidraw/components/Dialog";
-import DialogActionButton from "@excalidraw/excalidraw/components/DialogActionButton";
+import { CloseIcon, checkIcon } from "@excalidraw/excalidraw/components/icons";
 import { t } from "@excalidraw/excalidraw/i18n";
 import {
   useEffect,
@@ -27,26 +27,6 @@ import {
 } from "../code/codeBlock";
 
 import "./CodeBlockDialog.scss";
-
-const FONT_SIZE_PRESETS = [
-  { label: "S", value: 13 },
-  { label: "M", value: 16 },
-  { label: "L", value: 20 },
-  { label: "XL", value: 24 },
-];
-
-const HIGHLIGHT_COLOR_OPTIONS: Array<CodeBlockStyle["highlightColor"]> = [
-  "red",
-  "yellow",
-  "blue",
-  "green",
-];
-
-const HIGHLIGHT_STYLE_OPTIONS: Array<CodeBlockStyle["highlightStyle"]> = [
-  "outline",
-  "glow",
-  "filled",
-];
 
 const LANGUAGE_OPTIONS = [
   "plaintext",
@@ -164,13 +144,14 @@ export const CodeBlockDialog = ({
     }
   };
 
+  const primaryActionLabel =
+    mode === "edit" ? t("codeBlock.update") : t("codeBlock.insert");
+
   return (
     <Dialog
       size="regular"
       className="CodeBlockDialog__dialog"
-      title={
-        mode === "edit" ? t("codeBlock.titleEdit") : t("codeBlock.titleNew")
-      }
+      title=""
       onCloseRequest={onClose}
       autofocus={false}
       closeOnClickOutside={true}
@@ -180,134 +161,85 @@ export const CodeBlockDialog = ({
         onSubmit={(event) => void handleSubmit(event)}
       >
         <div className="CodeBlockDialog__toolbar">
-          <div className="CodeBlockDialog__toolbarGroup">
-            <span className="CodeBlockDialog__toolbarHint">
-              {t("labels.language")}
-            </span>
-            <select
-              className="CodeBlockDialog__select"
-              value={style.language}
-              onChange={(event) =>
-                setStyle((prev) => ({
-                  ...prev,
-                  language: event.target.value,
-                }))
-              }
-            >
-              {LANGUAGE_OPTIONS.map((language) => (
-                <option key={language} value={language}>
-                  {language}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="CodeBlockDialog__toolbarGroup">
-            <span className="CodeBlockDialog__toolbarHint">
-              {t("codeBlock.size")}
-            </span>
-            <div className="CodeBlockDialog__sizeOptions">
-              {FONT_SIZE_PRESETS.map((preset) => (
-                <button
-                  key={preset.value}
-                  type="button"
-                  className="CodeBlockDialog__styleChip"
-                  data-active={style.fontSize === preset.value}
-                  onClick={() =>
-                    setStyle((prev) => ({ ...prev, fontSize: preset.value }))
-                  }
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="CodeBlockDialog__toggleGroup">
-            <label
-              className="CodeBlockDialog__toggle"
-              title={t("codeBlock.wrapLongLines")}
-            >
-              <input
-                type="checkbox"
-                checked={style.wrap}
-                onChange={(event) =>
-                  setStyle((prev) => ({ ...prev, wrap: event.target.checked }))
-                }
-              />
-              <span>{t("codeBlock.wrap")}</span>
-            </label>
-
-            <label
-              className="CodeBlockDialog__toggle"
-              title={t("codeBlock.showLineNumbers")}
-            >
-              <input
-                type="checkbox"
-                checked={style.lineNumbers}
+          <div className="CodeBlockDialog__toolbarRow CodeBlockDialog__toolbarRow--top">
+            <div className="CodeBlockDialog__toolbarGroup">
+              <span className="CodeBlockDialog__toolbarHint">
+                {t("labels.language")}
+              </span>
+              <select
+                className="CodeBlockDialog__select"
+                value={style.language}
                 onChange={(event) =>
                   setStyle((prev) => ({
                     ...prev,
-                    lineNumbers: event.target.checked,
+                    language: event.target.value,
                   }))
                 }
-              />
-              <span>{t("codeBlock.lineNumbers")}</span>
-            </label>
-          </div>
-        </div>
-
-        <div className="CodeBlockDialog__highlights">
-          <div className="CodeBlockDialog__highlightsHeader">
-            {t("codeBlock.highlights")}
-          </div>
-          <div className="CodeBlockDialog__highlightsControls">
-            <input
-              className="CodeBlockDialog__textInput"
-              type="text"
-              placeholder={t("codeBlock.highlightPlaceholder")}
-              value={style.highlightSpec}
-              onChange={(event) =>
-                setStyle((prev) => ({
-                  ...prev,
-                  highlightSpec: event.target.value,
-                }))
-              }
-            />
-
-            <div className="CodeBlockDialog__sizeOptions">
-              {HIGHLIGHT_COLOR_OPTIONS.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  className="CodeBlockDialog__styleChip"
-                  data-active={style.highlightColor === color}
-                  onClick={() =>
-                    setStyle((prev) => ({ ...prev, highlightColor: color }))
-                  }
-                >
-                  {color}
-                </button>
-              ))}
+              >
+                {LANGUAGE_OPTIONS.map((language) => (
+                  <option key={language} value={language}>
+                    {language}
+                  </option>
+                ))}
+              </select>
             </div>
-
-            <div className="CodeBlockDialog__sizeOptions">
-              {HIGHLIGHT_STYLE_OPTIONS.map((variant) => (
-                <button
-                  key={variant}
-                  type="button"
-                  className="CodeBlockDialog__styleChip"
-                  data-active={style.highlightStyle === variant}
-                  onClick={() =>
+            <div className="CodeBlockDialog__toolbarActions">
+              <button
+                type="button"
+                className="CodeBlockDialog__iconButton"
+                onClick={onClose}
+                disabled={isSubmitting}
+                aria-label={t("buttons.cancel")}
+                title={t("buttons.cancel")}
+              >
+                {CloseIcon}
+              </button>
+              <button
+                type="submit"
+                className="CodeBlockDialog__iconButton CodeBlockDialog__iconButton--primary"
+                disabled={isSubmitting}
+                aria-label={primaryActionLabel}
+                title={primaryActionLabel}
+              >
+                {checkIcon}
+              </button>
+            </div>
+          </div>
+          <div className="CodeBlockDialog__toolbarRow CodeBlockDialog__toolbarRow--bottom">
+            <div className="CodeBlockDialog__toggleGroup">
+              <label
+                className="CodeBlockDialog__toggle"
+                title={t("codeBlock.wrapLongLines")}
+              >
+                <input
+                  type="checkbox"
+                  checked={style.wrap}
+                  onChange={(event) =>
                     setStyle((prev) => ({
                       ...prev,
-                      highlightStyle: variant,
+                      wrap: event.target.checked,
                     }))
                   }
-                >
-                  {variant}
-                </button>
-              ))}
+                />
+                <span>{t("codeBlock.wrap")}</span>
+              </label>
+
+              <label
+                className="CodeBlockDialog__toggle"
+                title={t("codeBlock.showLineNumbers")}
+              >
+                <input
+                  type="checkbox"
+                  checked={style.lineNumbers}
+                  onChange={(event) =>
+                    setStyle((prev) => ({
+                      ...prev,
+                      lineNumbers: event.target.checked,
+                    }))
+                  }
+                />
+                <span>{t("codeBlock.lineNumbers")}</span>
+              </label>
             </div>
           </div>
         </div>
@@ -427,27 +359,6 @@ export const CodeBlockDialog = ({
         {submitError && (
           <div className="CodeBlockDialog__error">{submitError}</div>
         )}
-
-        <div className="CodeBlockDialog__actions">
-          <div className="CodeBlockDialog__hint">
-            {t("codeBlock.shortcutHint")}
-          </div>
-          <DialogActionButton
-            label={t("buttons.cancel")}
-            onClick={onClose}
-            disabled={isSubmitting}
-            style={{ marginRight: 10 }}
-          />
-          <DialogActionButton
-            label={
-              mode === "edit" ? t("codeBlock.update") : t("codeBlock.insert")
-            }
-            type="submit"
-            actionType="primary"
-            isLoading={isSubmitting}
-            disabled={isSubmitting}
-          />
-        </div>
       </form>
     </Dialog>
   );

@@ -20,6 +20,10 @@ type CodeBlockStyle = {
   highlightSpec: string;
   highlightColor: "red" | "yellow" | "blue" | "green";
   highlightStyle: "outline" | "glow" | "filled";
+  highlightCustomBorderColor?: string;
+  highlightCustomBackground?: string;
+  highlightBorderWidth: number;
+  highlightBorderRadius: number;
   theme: "light" | "dark";
 };
 
@@ -31,6 +35,10 @@ const DEFAULT_STYLE: CodeBlockStyle = {
   highlightSpec: "",
   highlightColor: "yellow",
   highlightStyle: "outline",
+  highlightCustomBorderColor: undefined,
+  highlightCustomBackground: undefined,
+  highlightBorderWidth: 1.5,
+  highlightBorderRadius: 6,
   theme: "light",
 };
 
@@ -90,6 +98,28 @@ const normalizeStyle = (
     style?.highlightStyle === "filled"
       ? style.highlightStyle
       : DEFAULT_STYLE.highlightStyle,
+  highlightCustomBorderColor:
+    typeof style?.highlightCustomBorderColor === "string" &&
+    style.highlightCustomBorderColor.trim() &&
+    style.highlightCustomBorderColor.trim().toLowerCase() !== "transparent"
+      ? style.highlightCustomBorderColor.trim()
+      : undefined,
+  highlightCustomBackground:
+    typeof style?.highlightCustomBackground === "string" &&
+    style.highlightCustomBackground.trim() &&
+    style.highlightCustomBackground.trim().toLowerCase() !== "transparent"
+      ? style.highlightCustomBackground.trim()
+      : undefined,
+  highlightBorderWidth:
+    typeof style?.highlightBorderWidth === "number" &&
+    Number.isFinite(style.highlightBorderWidth)
+      ? Math.min(Math.max(style.highlightBorderWidth, 1), 8)
+      : DEFAULT_STYLE.highlightBorderWidth,
+  highlightBorderRadius:
+    typeof style?.highlightBorderRadius === "number" &&
+    Number.isFinite(style.highlightBorderRadius)
+      ? Math.min(Math.max(style.highlightBorderRadius, 0), 24)
+      : DEFAULT_STYLE.highlightBorderRadius,
   theme: style?.theme === "light" ? "light" : DEFAULT_STYLE.theme,
 });
 
@@ -321,6 +351,9 @@ const createExportStyleBlock = (style: CodeBlockStyle, lineCount: number) => {
     style.highlightColor,
     style.theme,
   );
+  const borderColor =
+    style.highlightCustomBorderColor || highlightTokens.border;
+  const fillColor = style.highlightCustomBackground || highlightTokens.fill;
 
   return `
     .code-block-export {
@@ -352,7 +385,7 @@ const createExportStyleBlock = (style: CodeBlockStyle, lineCount: number) => {
       position: absolute;
       left: 0;
       right: 0;
-      border-radius: 6px;
+      border-radius: ${style.highlightBorderRadius}px;
     }
     .code-block-export__gutter {
       margin: 0;
@@ -391,20 +424,20 @@ const createExportStyleBlock = (style: CodeBlockStyle, lineCount: number) => {
       line-height: inherit;
     }
     .code-block-export__highlight--outline {
-      border: 1.5px solid ${highlightTokens.border};
+      border: ${style.highlightBorderWidth}px solid ${borderColor};
       background: transparent;
       box-shadow: none;
     }
     .code-block-export__highlight--glow {
-      border: 1.5px solid ${highlightTokens.border};
-      background: ${highlightTokens.fill};
-      box-shadow: 0 0 0 1px ${highlightTokens.fill} inset, 0 0 14px ${
+      border: ${style.highlightBorderWidth}px solid ${borderColor};
+      background: ${fillColor};
+      box-shadow: 0 0 0 1px ${fillColor} inset, 0 0 14px ${
     highlightTokens.glow
   };
     }
     .code-block-export__highlight--filled {
-      border: 1.5px solid ${highlightTokens.border};
-      background: ${highlightTokens.fill};
+      border: ${style.highlightBorderWidth}px solid ${borderColor};
+      background: ${fillColor};
       box-shadow: none;
     }
     .code-block-export .hljs-comment,

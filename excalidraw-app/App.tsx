@@ -515,6 +515,41 @@ const resolveMathFormulaColorFromSidebar = (
   return color!;
 };
 
+const resolveCodeBlockHighlightColorFromSidebar = (
+  color: string | null | undefined,
+): CodeBlockStyle["highlightColor"] => {
+  const normalized = (color || "").trim().toLowerCase();
+  if (!normalized || normalized === "transparent") {
+    return "yellow";
+  }
+  const hexMatch = normalized.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!hexMatch) {
+    return "yellow";
+  }
+  const hex = hexMatch[1];
+  const [r, g, b] =
+    hex.length === 3
+      ? hex.split("").map((value) => parseInt(value + value, 16))
+      : [
+          parseInt(hex.slice(0, 2), 16),
+          parseInt(hex.slice(2, 4), 16),
+          parseInt(hex.slice(4, 6), 16),
+        ];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+
+  if (max - min < 18) {
+    return "yellow";
+  }
+  if (r >= g && r >= b) {
+    return "red";
+  }
+  if (g >= r && g >= b) {
+    return "green";
+  }
+  return "blue";
+};
+
 const getCodeBlockElementData = (
   element: NonDeletedExcalidrawElement | null,
 ): {
@@ -1181,6 +1216,8 @@ const ExcalidrawWrapper = () => {
       if (!excalidrawAPI) {
         throw new Error("Excalidraw editor is not ready yet.");
       }
+      const appState =
+        currentAppStateRef.current || excalidrawAPI.getAppState();
 
       setCodeBlockDialogState({
         mode: "insert",
@@ -1188,6 +1225,10 @@ const ExcalidrawWrapper = () => {
         sceneY,
         initialStyle: normalizeCodeBlockStyle({
           theme: appTheme === THEME.DARK ? "dark" : "light",
+          fontSize: appState.currentItemFontSize,
+          highlightColor: resolveCodeBlockHighlightColorFromSidebar(
+            appState.currentItemStrokeColor,
+          ),
         }),
         toolLocked: activeTool.locked,
       });
@@ -1201,16 +1242,26 @@ const ExcalidrawWrapper = () => {
       if (!codeBlockData) {
         return;
       }
+      const appState =
+        currentAppStateRef.current || excalidrawAPI?.getAppState();
 
       setCodeBlockDialogState({
         mode: "edit",
         targetElementId: element.id,
         initialValue: codeBlockData.source,
-        initialStyle: codeBlockData.style,
+        initialStyle: normalizeCodeBlockStyle({
+          ...codeBlockData.style,
+          theme: appTheme === THEME.DARK ? "dark" : "light",
+          fontSize:
+            appState?.currentItemFontSize ?? codeBlockData.style.fontSize,
+          highlightColor: resolveCodeBlockHighlightColorFromSidebar(
+            appState?.currentItemStrokeColor,
+          ),
+        }),
       });
       excalidrawAPI?.setActiveTool({ type: "selection" });
     },
-    [excalidrawAPI],
+    [appTheme, excalidrawAPI],
   );
 
   const handleCloseCodeBlockDialog = useCallback(() => {
@@ -1240,11 +1291,22 @@ const ExcalidrawWrapper = () => {
         throw new Error(t("codeBlock.errors.empty"));
       }
 
+      const appState =
+        currentAppStateRef.current || excalidrawAPI.getAppState();
+      const sidebarCodeBlockStyle = normalizeCodeBlockStyle({
+        ...style,
+        theme: appTheme === THEME.DARK ? "dark" : "light",
+        fontSize: appState.currentItemFontSize,
+        highlightColor: resolveCodeBlockHighlightColorFromSidebar(
+          appState.currentItemStrokeColor,
+        ),
+      });
+
       const {
         width,
         height,
         style: normalizedStyle,
-      } = measureCodeBlockDimensions(normalizedCode, style);
+      } = measureCodeBlockDimensions(normalizedCode, sidebarCodeBlockStyle);
 
       const codeBlockCustomData = {
         codeBlockSource: normalizedCode,
@@ -1342,7 +1404,7 @@ const ExcalidrawWrapper = () => {
         message: t("codeBlock.toast.inserted"),
       });
     },
-    [codeBlockDialogState, excalidrawAPI],
+    [appTheme, codeBlockDialogState, excalidrawAPI],
   );
 
   useEffect(() => {
@@ -1879,6 +1941,9 @@ const ExcalidrawWrapper = () => {
     const selectedElementIdsSignature = getSelectedElementIdsSignature(
       appState.selectedElementIds,
     );
+    const selectedElementIds = Object.keys(
+      appState.selectedElementIds || {},
+    ).filter((elementId) => appState.selectedElementIds?.[elementId]);
     pruneSignatureCache(umlClassLayoutSignatureCacheRef.current, elementsById);
     pruneSignatureCache(
       umlDiagramLayoutSignatureCacheRef.current,
@@ -1886,6 +1951,97 @@ const ExcalidrawWrapper = () => {
     );
 
     try {
+      if (selectedElementIds.length === 1 && excalidrawAPI) {
+        const selectedElement = elementsById.get(selectedElementIds[0]);
+
+        if (selectedElement && isEmbeddableElement(selectedElement)) {
+          const codeBlockData = getCodeBlockElementData(
+            selectedElement as NonDeletedExcalidrawElement,
+          );
+
+          if (codeBlockData) {
+            const sidebarStyle = normalizeCodeBlockStyle({
+              ...codeBlockData.style,
+              fontSize: appState.currentItemFontSize,
+            });
+
+            const didSidebarStyleChange =
+              sidebarStyle.fontSize !== codeBlockData.style.fontSize ||
+              sidebarStyle.highlightStyle !==
+                codeBlockData.style.highlightStyle ||
+              sidebarStyle.highlightCustomBorderColor !==
+                codeBlockData.style.highlightCustomBorderColor ||
+              sidebarStyle.highlightCustomBackground !==
+                codeBlockData.style.highlightCustomBackground ||
+              sidebarStyle.highlightBorderWidth !==
+                codeBlockData.style.highlightBorderWidth ||
+              sidebarStyle.highlightBorderRadius !==
+                codeBlockData.style.highlightBorderRadius;
+
+            if (didSidebarStyleChange) {
+              const {
+                width: nextIntrinsicWidth,
+                height: nextIntrinsicHeight,
+                style: normalizedStyle,
+              } = measureCodeBlockDimensions(
+                codeBlockData.source,
+                sidebarStyle,
+              );
+              const currentCustomData = (selectedElement.customData ||
+                {}) as Record<string, unknown>;
+              const prevIntrinsicWidth =
+                typeof currentCustomData.intrinsicWidth === "number"
+                  ? Math.max(currentCustomData.intrinsicWidth, 1)
+                  : Math.max(selectedElement.width, 1);
+              const prevIntrinsicHeight =
+                typeof currentCustomData.intrinsicHeight === "number"
+                  ? Math.max(currentCustomData.intrinsicHeight, 1)
+                  : Math.max(selectedElement.height, 1);
+              const widthScale = selectedElement.width / prevIntrinsicWidth;
+              const heightScale = selectedElement.height / prevIntrinsicHeight;
+              const nextWidth = Math.max(
+                1,
+                Math.round(
+                  nextIntrinsicWidth *
+                    (Number.isFinite(widthScale) ? widthScale : 1),
+                ),
+              );
+              const nextHeight = Math.max(
+                1,
+                Math.round(
+                  nextIntrinsicHeight *
+                    (Number.isFinite(heightScale) ? heightScale : 1),
+                ),
+              );
+              const updatedElement = newElementWith(selectedElement, {
+                width: nextWidth,
+                height: nextHeight,
+                link: null,
+                customData: {
+                  ...currentCustomData,
+                  codeBlockStyle: normalizedStyle,
+                  intrinsicWidth: nextIntrinsicWidth,
+                  intrinsicHeight: nextIntrinsicHeight,
+                },
+              });
+
+              excalidrawAPI.updateScene({
+                elements: elements.map((element) =>
+                  element.id === selectedElement.id ? updatedElement : element,
+                ),
+                appState: {
+                  selectedElementIds: {
+                    [selectedElement.id]: true,
+                  },
+                },
+                captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+              });
+              return;
+            }
+          }
+        }
+      }
+
       const selectedUmlRoot = resolveSelectedUmlClassTemplateRootWithMap(
         elementsById,
         appState.selectedElementIds,
@@ -3021,15 +3177,10 @@ const ExcalidrawWrapper = () => {
         string,
         unknown
       >;
-      const prevIntrinsicWidth =
-        typeof currentCustomData.intrinsicWidth === "number"
-          ? Math.max(currentCustomData.intrinsicWidth, 1)
-          : Math.max(targetElement.width, 1);
-      const isUsingNaturalWidth =
-        Math.abs(targetElement.width - prevIntrinsicWidth) < 2;
-      const resolvedWidth = isUsingNaturalWidth
-        ? nextWidth
-        : Math.max(targetElement.width, 1);
+      const resolvedWidth = Math.max(
+        nextWidth,
+        Math.max(targetElement.width, 1),
+      );
 
       if (
         Math.abs(targetElement.width - resolvedWidth) < 1 &&

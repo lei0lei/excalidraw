@@ -27,6 +27,10 @@ export type CodeBlockStyle = {
   highlightSpec: string;
   highlightColor: "red" | "yellow" | "blue" | "green";
   highlightStyle: "outline" | "glow" | "filled";
+  highlightCustomBorderColor?: string;
+  highlightCustomBackground?: string;
+  highlightBorderWidth: number;
+  highlightBorderRadius: number;
   theme: "light" | "dark";
 };
 
@@ -56,6 +60,10 @@ export const DEFAULT_CODE_BLOCK_STYLE: CodeBlockStyle = {
   highlightSpec: "",
   highlightColor: "yellow",
   highlightStyle: "outline",
+  highlightCustomBorderColor: undefined,
+  highlightCustomBackground: undefined,
+  highlightBorderWidth: 1.5,
+  highlightBorderRadius: 6,
   theme: "light",
 };
 
@@ -109,6 +117,10 @@ const getCodeBlockCacheKey = (
     style.highlightSpec,
     style.highlightColor,
     style.highlightStyle,
+    style.highlightCustomBorderColor || "",
+    style.highlightCustomBackground || "",
+    style.highlightBorderWidth,
+    style.highlightBorderRadius,
     style.theme,
   ].join("::");
 
@@ -162,6 +174,28 @@ export const normalizeCodeBlockStyle = (
     style?.highlightStyle === "filled"
       ? style.highlightStyle
       : DEFAULT_CODE_BLOCK_STYLE.highlightStyle,
+  highlightCustomBorderColor:
+    typeof style?.highlightCustomBorderColor === "string" &&
+    style.highlightCustomBorderColor.trim() &&
+    style.highlightCustomBorderColor.trim().toLowerCase() !== "transparent"
+      ? style.highlightCustomBorderColor.trim()
+      : undefined,
+  highlightCustomBackground:
+    typeof style?.highlightCustomBackground === "string" &&
+    style.highlightCustomBackground.trim() &&
+    style.highlightCustomBackground.trim().toLowerCase() !== "transparent"
+      ? style.highlightCustomBackground.trim()
+      : undefined,
+  highlightBorderWidth:
+    typeof style?.highlightBorderWidth === "number" &&
+    Number.isFinite(style.highlightBorderWidth)
+      ? Math.min(Math.max(style.highlightBorderWidth, 1), 8)
+      : DEFAULT_CODE_BLOCK_STYLE.highlightBorderWidth,
+  highlightBorderRadius:
+    typeof style?.highlightBorderRadius === "number" &&
+    Number.isFinite(style.highlightBorderRadius)
+      ? Math.min(Math.max(style.highlightBorderRadius, 0), 24)
+      : DEFAULT_CODE_BLOCK_STYLE.highlightBorderRadius,
   theme: style?.theme === "light" ? "light" : DEFAULT_CODE_BLOCK_STYLE.theme,
 });
 
@@ -368,27 +402,34 @@ export const getCodeBlockHighlightOverlayStyle = (
   theme: CodeBlockStyle["theme"],
 ) => {
   const tokens = getCodeBlockHighlightTokens(style.highlightColor, theme);
+  const borderColor = style.highlightCustomBorderColor || tokens.border;
+  const fillColor = style.highlightCustomBackground || tokens.fill;
+  const borderWidth = style.highlightBorderWidth;
+  const borderRadius = style.highlightBorderRadius;
 
   if (style.highlightStyle === "filled") {
     return {
-      border: `1.5px solid ${tokens.border}`,
-      background: tokens.fill,
+      border: `${borderWidth}px solid ${borderColor}`,
+      background: fillColor,
       boxShadow: "none",
+      borderRadius: `${borderRadius}px`,
     };
   }
 
   if (style.highlightStyle === "glow") {
     return {
-      border: `1.5px solid ${tokens.border}`,
-      background: tokens.fill,
-      boxShadow: `0 0 0 1px ${tokens.fill} inset, 0 0 14px ${tokens.glow}`,
+      border: `${borderWidth}px solid ${borderColor}`,
+      background: fillColor,
+      boxShadow: `0 0 0 1px ${fillColor} inset, 0 0 14px ${tokens.glow}`,
+      borderRadius: `${borderRadius}px`,
     };
   }
 
   return {
-    border: `1.5px solid ${tokens.border}`,
+    border: `${borderWidth}px solid ${borderColor}`,
     background: "transparent",
     boxShadow: "none",
+    borderRadius: `${borderRadius}px`,
   };
 };
 

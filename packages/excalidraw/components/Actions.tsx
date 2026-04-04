@@ -178,6 +178,20 @@ const isMathFormulaEmbeddable = (element: ExcalidrawElement) => {
   );
 };
 
+const isCodeBlockEmbeddable = (element: ExcalidrawElement) => {
+  if (!isEmbeddableElement(element)) {
+    return false;
+  }
+
+  const customData = element.customData as
+    | {
+        codeBlockType?: string;
+      }
+    | undefined;
+
+  return customData?.codeBlockType === "code";
+};
+
 export const SelectedShapeActions = ({
   appState,
   elementsMap,
@@ -231,6 +245,14 @@ export const SelectedShapeActions = ({
     !isSingleElementBoundContainer && alignActionsPredicate(appState, app);
   const isSingleMathFormulaSelection =
     targetElements.length === 1 && isMathFormulaEmbeddable(targetElements[0]);
+  const isSingleCodeBlockSelection =
+    targetElements.length === 1 && isCodeBlockEmbeddable(targetElements[0]);
+  const showTextTypographyControls =
+    appState.activeTool.type === "text" || targetElements.some(isTextElement);
+  const showFontSizeControl =
+    showTextTypographyControls ||
+    targetElements.some(isMathFormulaEmbeddable) ||
+    targetElements.some(isCodeBlockEmbeddable);
 
   if (isSingleMathFormulaSelection) {
     return (
@@ -264,6 +286,21 @@ export const SelectedShapeActions = ({
             {renderAction("hyperlink")}
           </div>
         </fieldset>
+      </div>
+    );
+  }
+
+  if (isSingleCodeBlockSelection) {
+    return (
+      <div className="selected-shape-actions">
+        <div>{renderAction("changeStrokeColor")}</div>
+        <div>{renderAction("changeBackgroundColor")}</div>
+        {renderAction("changeStrokeWidth")}
+        {renderAction("changeStrokeStyle")}
+        {renderAction("changeRoundness")}
+        {renderAction("changeFontSize")}
+        {renderAction("changeCodeBlockHighlightSpec")}
+        {renderAction("changeOpacity")}
       </div>
     );
   }
@@ -305,16 +342,15 @@ export const SelectedShapeActions = ({
         <>{renderAction("changeArrowType")}</>
       )}
 
-      {(appState.activeTool.type === "text" ||
-        targetElements.some(isTextElement)) && (
+      {showTextTypographyControls && (
         <>
           <fieldset>{renderAction("changeFontFamily")}</fieldset>
-          {renderAction("changeFontSize")}
           {(appState.activeTool.type === "text" ||
             suppportsHorizontalAlign(targetElements, elementsMap)) &&
             renderAction("changeTextAlign")}
         </>
       )}
+      {showFontSizeControl && renderAction("changeFontSize")}
 
       {shouldAllowVerticalAlign(targetElements, elementsMap) &&
         renderAction("changeVerticalAlign")}
@@ -613,6 +649,11 @@ const CombinedTextProperties = ({
 }) => {
   const { saveCaretPosition, restoreCaretPosition } = useTextEditorFocus();
   const isOpen = appState.openPopup === "compactTextProperties";
+  const showFontSizeControl =
+    appState.activeTool.type === "text" ||
+    targetElements.some(isTextElement) ||
+    targetElements.some(isMathFormulaEmbeddable) ||
+    targetElements.some(isCodeBlockEmbeddable);
 
   return (
     <div className="compact-action-item">
@@ -671,9 +712,7 @@ const CombinedTextProperties = ({
             }}
           >
             <div className="selected-shape-actions">
-              {(appState.activeTool.type === "text" ||
-                targetElements.some(isTextElement)) &&
-                renderAction("changeFontSize")}
+              {showFontSizeControl && renderAction("changeFontSize")}
               {(appState.activeTool.type === "text" ||
                 suppportsHorizontalAlign(targetElements, elementsMap)) &&
                 renderAction("changeTextAlign")}

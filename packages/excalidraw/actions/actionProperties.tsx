@@ -211,6 +211,63 @@ const getMathFormulaStyle = (element: ExcalidrawElement) => {
   return customData.formulaStyle || {};
 };
 
+const getCodeBlockFontSize = (element: ExcalidrawElement) => {
+  if (!isEmbeddableElement(element)) {
+    return null;
+  }
+
+  const customData = element.customData as
+    | {
+        codeBlockType?: string;
+        codeBlockStyle?: {
+          fontSize?: number;
+        };
+      }
+    | undefined;
+
+  if (customData?.codeBlockType !== "code") {
+    return null;
+  }
+
+  const fontSize = customData.codeBlockStyle?.fontSize;
+  return typeof fontSize === "number" && Number.isFinite(fontSize)
+    ? fontSize
+    : null;
+};
+
+const getCodeBlockStyle = (element: ExcalidrawElement) => {
+  if (!isEmbeddableElement(element)) {
+    return null;
+  }
+
+  const customData = element.customData as
+    | {
+        codeBlockType?: string;
+        codeBlockStyle?: {
+          fontSize?: number;
+          highlightStyle?: string;
+          highlightSpec?: string;
+          highlightCustomBorderColor?: string;
+          highlightCustomBackground?: string;
+          highlightBorderWidth?: number;
+          highlightBorderRadius?: number;
+        };
+      }
+    | undefined;
+
+  if (customData?.codeBlockType !== "code") {
+    return null;
+  }
+
+  return customData.codeBlockStyle || {};
+};
+
+const CODE_BLOCK_HIGHLIGHT_STYLE_OPTIONS = [
+  "outline",
+  "glow",
+  "filled",
+] as const;
+
 export const changeProperty = (
   elements: readonly ExcalidrawElement[],
   appState: AppState,
@@ -343,6 +400,25 @@ const changeFontSize = (
             formulaType: "math",
             formulaStyle: {
               ...mathFormulaStyle,
+              fontSize: nextFontSize,
+            },
+          },
+        });
+      }
+      const codeBlockStyle = getCodeBlockStyle(oldElement);
+      if (codeBlockStyle) {
+        const nextFontSize = getNewFontSize({
+          ...oldElement,
+          type: "text",
+          fontSize: codeBlockStyle.fontSize ?? appState.currentItemFontSize,
+        } as ExcalidrawTextElement);
+        newFontSizes.add(nextFontSize);
+        return newElementWith(oldElement, {
+          customData: {
+            ...(oldElement.customData || {}),
+            codeBlockType: "code",
+            codeBlockStyle: {
+              ...codeBlockStyle,
               fontSize: nextFontSize,
             },
           },
@@ -878,6 +954,10 @@ export const actionChangeFontSize = register<ExcalidrawTextElement["fontSize"]>(
                   if (mathFormulaFontSize !== null) {
                     return mathFormulaFontSize;
                   }
+                  const codeBlockFontSize = getCodeBlockFontSize(element);
+                  if (codeBlockFontSize !== null) {
+                    return codeBlockFontSize;
+                  }
                   const boundTextElement = getBoundTextElement(
                     element,
                     app.scene.getNonDeletedElementsMap(),
@@ -890,6 +970,7 @@ export const actionChangeFontSize = register<ExcalidrawTextElement["fontSize"]>(
                 (element) =>
                   isTextElement(element) ||
                   getMathFormulaFontSize(element) !== null ||
+                  getCodeBlockFontSize(element) !== null ||
                   getBoundTextElement(
                     element,
                     app.scene.getNonDeletedElementsMap(),
@@ -914,6 +995,218 @@ export const actionChangeFontSize = register<ExcalidrawTextElement["fontSize"]>(
     },
   },
 );
+
+export const actionChangeCodeBlockHighlightSpec = register<
+  | string
+  | {
+      highlightSpec?: string;
+      highlightStyle?: "outline" | "glow" | "filled";
+      highlightCustomBorderColor?: string;
+      highlightCustomBackground?: string;
+      highlightBorderWidth?: number;
+      highlightBorderRadius?: number;
+    }
+>({
+  name: "changeCodeBlockHighlightSpec",
+  label: "codeBlock.highlights",
+  trackEvent: false,
+  perform: (elements, appState, value) => {
+    const nextValue =
+      typeof value === "string" ? { highlightSpec: value } : value ?? {};
+    return {
+      elements: changeProperty(
+        elements,
+        appState,
+        (el) =>
+          getCodeBlockStyle(el)
+            ? newElementWith(el, {
+                customData: {
+                  ...(el.customData || {}),
+                  codeBlockType: "code",
+                  codeBlockStyle: {
+                    ...getCodeBlockStyle(el),
+                    ...(typeof nextValue.highlightSpec === "string"
+                      ? { highlightSpec: nextValue.highlightSpec.trim() }
+                      : {}),
+                    ...(nextValue.highlightStyle
+                      ? { highlightStyle: nextValue.highlightStyle }
+                      : {}),
+                    ...(typeof nextValue.highlightCustomBorderColor === "string"
+                      ? {
+                          highlightCustomBorderColor:
+                            nextValue.highlightCustomBorderColor,
+                        }
+                      : {}),
+                    ...(typeof nextValue.highlightCustomBackground === "string"
+                      ? {
+                          highlightCustomBackground:
+                            nextValue.highlightCustomBackground,
+                        }
+                      : {}),
+                    ...(typeof nextValue.highlightBorderWidth === "number"
+                      ? {
+                          highlightBorderWidth: Math.min(
+                            Math.max(nextValue.highlightBorderWidth, 1),
+                            8,
+                          ),
+                        }
+                      : {}),
+                    ...(typeof nextValue.highlightBorderRadius === "number"
+                      ? {
+                          highlightBorderRadius: Math.min(
+                            Math.max(nextValue.highlightBorderRadius, 0),
+                            24,
+                          ),
+                        }
+                      : {}),
+                  },
+                },
+              })
+            : el,
+        true,
+      ),
+      appState,
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    };
+  },
+  PanelComponent: ({ elements, appState, updateData, app }) => (
+    <fieldset>
+      <legend>{t("codeBlock.highlights")}</legend>
+      <input
+        className="text-input"
+        style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box" }}
+        type="text"
+        value={getFormValue(
+          elements,
+          app,
+          (element) =>
+            (getCodeBlockStyle(element)?.highlightSpec as string) || "",
+          (element) => getCodeBlockStyle(element) !== null,
+          (hasSelection) => (hasSelection ? "" : ""),
+        )}
+        onChange={(event) => updateData(event.target.value)}
+        placeholder={t("codeBlock.highlightPlaceholder")}
+      />
+      <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Highlight style</span>
+          <select
+            className="text-input"
+            value={getFormValue(
+              elements,
+              app,
+              (element) =>
+                (getCodeBlockStyle(element)?.highlightStyle as string) ||
+                "outline",
+              (element) => getCodeBlockStyle(element) !== null,
+              () => "outline",
+            )}
+            onChange={(event) =>
+              updateData({
+                highlightStyle: event.target.value as
+                  | "outline"
+                  | "glow"
+                  | "filled",
+              })
+            }
+          >
+            {CODE_BLOCK_HIGHLIGHT_STYLE_OPTIONS.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Highlight border color</span>
+          <input
+            className="text-input"
+            type="color"
+            value={getFormValue(
+              elements,
+              app,
+              (element) =>
+                (getCodeBlockStyle(element)
+                  ?.highlightCustomBorderColor as string) || "#ca8a04",
+              (element) => getCodeBlockStyle(element) !== null,
+              () => "#ca8a04",
+            )}
+            onChange={(event) =>
+              updateData({ highlightCustomBorderColor: event.target.value })
+            }
+          />
+        </label>
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Highlight fill color</span>
+          <input
+            className="text-input"
+            type="color"
+            value={getFormValue(
+              elements,
+              app,
+              (element) =>
+                (getCodeBlockStyle(element)
+                  ?.highlightCustomBackground as string) || "#facc15",
+              (element) => getCodeBlockStyle(element) !== null,
+              () => "#facc15",
+            )}
+            onChange={(event) =>
+              updateData({ highlightCustomBackground: event.target.value })
+            }
+          />
+        </label>
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Highlight border width</span>
+          <input
+            className="text-input"
+            type="number"
+            min={1}
+            max={8}
+            step={1}
+            value={getFormValue(
+              elements,
+              app,
+              (element) =>
+                (getCodeBlockStyle(element)?.highlightBorderWidth as number) ||
+                2,
+              (element) => getCodeBlockStyle(element) !== null,
+              () => 2,
+            )}
+            onChange={(event) =>
+              updateData({
+                highlightBorderWidth: Number(event.target.value) || 1,
+              })
+            }
+          />
+        </label>
+        <label style={{ display: "grid", gap: 4 }}>
+          <span>Highlight corner</span>
+          <input
+            className="text-input"
+            type="number"
+            min={0}
+            max={24}
+            step={1}
+            value={getFormValue(
+              elements,
+              app,
+              (element) =>
+                (getCodeBlockStyle(element)?.highlightBorderRadius as number) ||
+                0,
+              (element) => getCodeBlockStyle(element) !== null,
+              () => 0,
+            )}
+            onChange={(event) =>
+              updateData({
+                highlightBorderRadius: Number(event.target.value) || 0,
+              })
+            }
+          />
+        </label>
+      </div>
+    </fieldset>
+  ),
+});
 
 export const actionDecreaseFontSize = register({
   name: "decreaseFontSize",
