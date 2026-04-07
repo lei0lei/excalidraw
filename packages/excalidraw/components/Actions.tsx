@@ -300,6 +300,11 @@ export const SelectedShapeActions = ({
         {renderAction("changeRoundness")}
         {renderAction("changeFontSize")}
         {renderAction("changeCodeBlockHighlightSpec")}
+        <div>{renderAction("changeCodeBlockHighlightStrokeColor")}</div>
+        <div>{renderAction("changeCodeBlockHighlightBackgroundColor")}</div>
+        {renderAction("changeCodeBlockHighlightStrokeWidth")}
+        {renderAction("changeCodeBlockHighlightStrokeStyle")}
+        {renderAction("changeCodeBlockHighlightRoundness")}
         {renderAction("changeOpacity")}
       </div>
     );

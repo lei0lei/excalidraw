@@ -268,6 +268,68 @@ const CODE_BLOCK_HIGHLIGHT_STYLE_OPTIONS = [
   "filled",
 ] as const;
 
+const DEFAULT_CODE_BLOCK_HIGHLIGHT_BORDER_COLOR = "#ca8a04";
+const DEFAULT_CODE_BLOCK_HIGHLIGHT_BACKGROUND_COLOR = "#facc15";
+
+const applyCodeBlockHighlightPatch = (
+  el: ExcalidrawElement,
+  patch: {
+    highlightSpec?: string;
+    highlightStyle?: "outline" | "glow" | "filled";
+    highlightCustomBorderColor?: string;
+    highlightCustomBackground?: string;
+    highlightBorderWidth?: number;
+    highlightBorderRadius?: number;
+  },
+): ExcalidrawElement => {
+  const style = getCodeBlockStyle(el);
+  if (style === null) {
+    return el;
+  }
+
+  const next: typeof style = {
+    ...style,
+    ...patch,
+  };
+
+  if (typeof patch.highlightSpec === "string") {
+    next.highlightSpec = patch.highlightSpec.trim();
+  }
+  if (typeof next.highlightBorderWidth === "number") {
+    next.highlightBorderWidth = Math.min(
+      Math.max(next.highlightBorderWidth, 1),
+      8,
+    );
+  }
+  if (typeof next.highlightBorderRadius === "number") {
+    next.highlightBorderRadius = Math.min(
+      Math.max(next.highlightBorderRadius, 0),
+      24,
+    );
+  }
+
+  return newElementWith(el, {
+    customData: {
+      ...(el.customData || {}),
+      codeBlockType: "code",
+      codeBlockStyle: next,
+    },
+  });
+};
+
+const highlightBorderWidthToStrokeWidth = (
+  width: number | undefined,
+): typeof STROKE_WIDTH[keyof typeof STROKE_WIDTH] => {
+  const w = width ?? 2;
+  if (w <= STROKE_WIDTH.thin) {
+    return STROKE_WIDTH.thin;
+  }
+  if (w <= STROKE_WIDTH.bold) {
+    return STROKE_WIDTH.bold;
+  }
+  return STROKE_WIDTH.extraBold;
+};
+
 export const changeProperty = (
   elements: readonly ExcalidrawElement[],
   appState: AppState,
@@ -996,71 +1058,19 @@ export const actionChangeFontSize = register<ExcalidrawTextElement["fontSize"]>(
   },
 );
 
-export const actionChangeCodeBlockHighlightSpec = register<
-  | string
-  | {
-      highlightSpec?: string;
-      highlightStyle?: "outline" | "glow" | "filled";
-      highlightCustomBorderColor?: string;
-      highlightCustomBackground?: string;
-      highlightBorderWidth?: number;
-      highlightBorderRadius?: number;
-    }
->({
+export const actionChangeCodeBlockHighlightSpec = register<string>({
   name: "changeCodeBlockHighlightSpec",
   label: "codeBlock.highlights",
   trackEvent: false,
   perform: (elements, appState, value) => {
-    const nextValue =
-      typeof value === "string" ? { highlightSpec: value } : value ?? {};
     return {
       elements: changeProperty(
         elements,
         appState,
         (el) =>
           getCodeBlockStyle(el)
-            ? newElementWith(el, {
-                customData: {
-                  ...(el.customData || {}),
-                  codeBlockType: "code",
-                  codeBlockStyle: {
-                    ...getCodeBlockStyle(el),
-                    ...(typeof nextValue.highlightSpec === "string"
-                      ? { highlightSpec: nextValue.highlightSpec.trim() }
-                      : {}),
-                    ...(nextValue.highlightStyle
-                      ? { highlightStyle: nextValue.highlightStyle }
-                      : {}),
-                    ...(typeof nextValue.highlightCustomBorderColor === "string"
-                      ? {
-                          highlightCustomBorderColor:
-                            nextValue.highlightCustomBorderColor,
-                        }
-                      : {}),
-                    ...(typeof nextValue.highlightCustomBackground === "string"
-                      ? {
-                          highlightCustomBackground:
-                            nextValue.highlightCustomBackground,
-                        }
-                      : {}),
-                    ...(typeof nextValue.highlightBorderWidth === "number"
-                      ? {
-                          highlightBorderWidth: Math.min(
-                            Math.max(nextValue.highlightBorderWidth, 1),
-                            8,
-                          ),
-                        }
-                      : {}),
-                    ...(typeof nextValue.highlightBorderRadius === "number"
-                      ? {
-                          highlightBorderRadius: Math.min(
-                            Math.max(nextValue.highlightBorderRadius, 0),
-                            24,
-                          ),
-                        }
-                      : {}),
-                  },
-                },
+            ? applyCodeBlockHighlightPatch(el, {
+                highlightSpec: typeof value === "string" ? value : "",
               })
             : el,
         true,
@@ -1087,122 +1097,306 @@ export const actionChangeCodeBlockHighlightSpec = register<
         onChange={(event) => updateData(event.target.value)}
         placeholder={t("codeBlock.highlightPlaceholder")}
       />
-      <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-        <label style={{ display: "grid", gap: 4 }}>
-          <span>Highlight style</span>
-          <select
-            className="text-input"
-            value={getFormValue(
-              elements,
-              app,
-              (element) =>
-                (getCodeBlockStyle(element)?.highlightStyle as string) ||
-                "outline",
-              (element) => getCodeBlockStyle(element) !== null,
-              () => "outline",
-            )}
-            onChange={(event) =>
-              updateData({
-                highlightStyle: event.target.value as
-                  | "outline"
-                  | "glow"
-                  | "filled",
+    </fieldset>
+  ),
+});
+
+export const actionChangeCodeBlockHighlightStrokeColor = register<string>({
+  name: "changeCodeBlockHighlightStrokeColor",
+  label: "codeBlock.highlightStroke",
+  trackEvent: false,
+  perform: (elements, appState, value) => {
+    return {
+      elements: changeProperty(
+        elements,
+        appState,
+        (el) =>
+          value && getCodeBlockStyle(el)
+            ? applyCodeBlockHighlightPatch(el, {
+                highlightCustomBorderColor: value,
               })
-            }
-          >
-            {CODE_BLOCK_HIGHLIGHT_STYLE_OPTIONS.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: 4 }}>
-          <span>Highlight border color</span>
-          <input
-            className="text-input"
-            type="color"
-            value={getFormValue(
-              elements,
-              app,
-              (element) =>
-                (getCodeBlockStyle(element)
-                  ?.highlightCustomBorderColor as string) || "#ca8a04",
-              (element) => getCodeBlockStyle(element) !== null,
-              () => "#ca8a04",
-            )}
-            onChange={(event) =>
-              updateData({ highlightCustomBorderColor: event.target.value })
-            }
-          />
-        </label>
-        <label style={{ display: "grid", gap: 4 }}>
-          <span>Highlight fill color</span>
-          <input
-            className="text-input"
-            type="color"
-            value={getFormValue(
-              elements,
-              app,
-              (element) =>
-                (getCodeBlockStyle(element)
-                  ?.highlightCustomBackground as string) || "#facc15",
-              (element) => getCodeBlockStyle(element) !== null,
-              () => "#facc15",
-            )}
-            onChange={(event) =>
-              updateData({ highlightCustomBackground: event.target.value })
-            }
-          />
-        </label>
-        <label style={{ display: "grid", gap: 4 }}>
-          <span>Highlight border width</span>
-          <input
-            className="text-input"
-            type="number"
-            min={1}
-            max={8}
-            step={1}
-            value={getFormValue(
-              elements,
-              app,
-              (element) =>
-                (getCodeBlockStyle(element)?.highlightBorderWidth as number) ||
-                2,
-              (element) => getCodeBlockStyle(element) !== null,
-              () => 2,
-            )}
-            onChange={(event) =>
-              updateData({
-                highlightBorderWidth: Number(event.target.value) || 1,
+            : el,
+        true,
+      ),
+      appState,
+      captureUpdate: value
+        ? CaptureUpdateAction.IMMEDIATELY
+        : CaptureUpdateAction.EVENTUALLY,
+    };
+  },
+  PanelComponent: ({ elements, appState, updateData, app }) => {
+    const { stylesPanelMode } = getStylesPanelInfo(app);
+
+    return (
+      <>
+        {stylesPanelMode === "full" && (
+          <h3 aria-hidden="true">{t("codeBlock.highlightStroke")}</h3>
+        )}
+        <ColorPicker
+          topPicks={DEFAULT_ELEMENT_STROKE_PICKS}
+          palette={DEFAULT_ELEMENT_STROKE_COLOR_PALETTE}
+          type="elementStroke"
+          label={t("codeBlock.highlightStroke")}
+          color={getFormValue(
+            elements,
+            app,
+            (element) =>
+              getCodeBlockStyle(element)?.highlightCustomBorderColor ??
+              DEFAULT_CODE_BLOCK_HIGHLIGHT_BORDER_COLOR,
+            (element) => getCodeBlockStyle(element) !== null,
+            () => DEFAULT_CODE_BLOCK_HIGHLIGHT_BORDER_COLOR,
+          )}
+          onChange={(color) => updateData(color)}
+          elements={elements}
+          appState={appState}
+          updateData={updateData}
+        />
+      </>
+    );
+  },
+});
+
+export const actionChangeCodeBlockHighlightBackgroundColor = register<string>({
+  name: "changeCodeBlockHighlightBackgroundColor",
+  label: "codeBlock.highlightBackground",
+  trackEvent: false,
+  perform: (elements, appState, value) => {
+    return {
+      elements: changeProperty(
+        elements,
+        appState,
+        (el) =>
+          value && getCodeBlockStyle(el)
+            ? applyCodeBlockHighlightPatch(el, {
+                highlightCustomBackground: value,
               })
-            }
-          />
-        </label>
-        <label style={{ display: "grid", gap: 4 }}>
-          <span>Highlight corner</span>
-          <input
-            className="text-input"
-            type="number"
-            min={0}
-            max={24}
-            step={1}
-            value={getFormValue(
-              elements,
-              app,
-              (element) =>
-                (getCodeBlockStyle(element)?.highlightBorderRadius as number) ||
-                0,
-              (element) => getCodeBlockStyle(element) !== null,
-              () => 0,
-            )}
-            onChange={(event) =>
-              updateData({
-                highlightBorderRadius: Number(event.target.value) || 0,
+            : el,
+        true,
+      ),
+      appState,
+      captureUpdate: value
+        ? CaptureUpdateAction.IMMEDIATELY
+        : CaptureUpdateAction.EVENTUALLY,
+    };
+  },
+  PanelComponent: ({ elements, appState, updateData, app }) => {
+    const { stylesPanelMode } = getStylesPanelInfo(app);
+
+    return (
+      <>
+        {stylesPanelMode === "full" && (
+          <h3 aria-hidden="true">{t("codeBlock.highlightBackground")}</h3>
+        )}
+        <ColorPicker
+          topPicks={DEFAULT_ELEMENT_BACKGROUND_PICKS}
+          palette={DEFAULT_ELEMENT_BACKGROUND_COLOR_PALETTE}
+          type="elementBackground"
+          label={t("codeBlock.highlightBackground")}
+          color={getFormValue(
+            elements,
+            app,
+            (element) =>
+              getCodeBlockStyle(element)?.highlightCustomBackground ??
+              DEFAULT_CODE_BLOCK_HIGHLIGHT_BACKGROUND_COLOR,
+            (element) => getCodeBlockStyle(element) !== null,
+            () => DEFAULT_CODE_BLOCK_HIGHLIGHT_BACKGROUND_COLOR,
+          )}
+          onChange={(color) => updateData(color)}
+          elements={elements}
+          appState={appState}
+          updateData={updateData}
+        />
+      </>
+    );
+  },
+});
+
+export const actionChangeCodeBlockHighlightStrokeWidth = register<
+  typeof STROKE_WIDTH[keyof typeof STROKE_WIDTH]
+>({
+  name: "changeCodeBlockHighlightStrokeWidth",
+  label: "codeBlock.highlightStrokeWidth",
+  trackEvent: false,
+  perform: (elements, appState, value) => {
+    return {
+      elements: changeProperty(
+        elements,
+        appState,
+        (el) =>
+          typeof value === "number" && getCodeBlockStyle(el)
+            ? applyCodeBlockHighlightPatch(el, {
+                highlightBorderWidth: value,
               })
-            }
-          />
-        </label>
+            : el,
+        true,
+      ),
+      appState,
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    };
+  },
+  PanelComponent: ({ elements, appState, updateData, app }) => (
+    <fieldset>
+      <legend>{t("codeBlock.highlightStrokeWidth")}</legend>
+      <div className="buttonList">
+        <RadioSelection
+          group="code-block-highlight-stroke-width"
+          options={[
+            {
+              value: STROKE_WIDTH.thin,
+              text: t("labels.thin"),
+              icon: StrokeWidthBaseIcon,
+              testId: "codeBlockHighlightStrokeWidth-thin",
+            },
+            {
+              value: STROKE_WIDTH.bold,
+              text: t("labels.bold"),
+              icon: StrokeWidthBoldIcon,
+              testId: "codeBlockHighlightStrokeWidth-bold",
+            },
+            {
+              value: STROKE_WIDTH.extraBold,
+              text: t("labels.extraBold"),
+              icon: StrokeWidthExtraBoldIcon,
+              testId: "codeBlockHighlightStrokeWidth-extraBold",
+            },
+          ]}
+          value={getFormValue(
+            elements,
+            app,
+            (element) =>
+              highlightBorderWidthToStrokeWidth(
+                getCodeBlockStyle(element)?.highlightBorderWidth,
+              ),
+            (element) => getCodeBlockStyle(element) !== null,
+            () => STROKE_WIDTH.bold,
+          )}
+          onChange={(next) => updateData(next)}
+        />
+      </div>
+    </fieldset>
+  ),
+});
+
+export const actionChangeCodeBlockHighlightStrokeStyle = register<
+  typeof CODE_BLOCK_HIGHLIGHT_STYLE_OPTIONS[number]
+>({
+  name: "changeCodeBlockHighlightStrokeStyle",
+  label: "codeBlock.highlightStrokeStyle",
+  trackEvent: false,
+  perform: (elements, appState, value) => {
+    return {
+      elements: changeProperty(
+        elements,
+        appState,
+        (el) =>
+          value && getCodeBlockStyle(el)
+            ? applyCodeBlockHighlightPatch(el, {
+                highlightStyle: value,
+              })
+            : el,
+        true,
+      ),
+      appState,
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    };
+  },
+  PanelComponent: ({ elements, appState, updateData, app }) => (
+    <fieldset>
+      <legend>{t("codeBlock.highlightStrokeStyle")}</legend>
+      <div className="buttonList">
+        <RadioSelection
+          group="code-block-highlight-style"
+          options={[
+            {
+              value: "outline",
+              text: t("codeBlock.highlightStyle_outline"),
+              icon: StrokeWidthBaseIcon,
+              testId: "codeBlockHighlightStyle-outline",
+            },
+            {
+              value: "glow",
+              text: t("codeBlock.highlightStyle_glow"),
+              icon: SloppinessArtistIcon,
+              testId: "codeBlockHighlightStyle-glow",
+            },
+            {
+              value: "filled",
+              text: t("codeBlock.highlightStyle_filled"),
+              icon: FillSolidIcon,
+              testId: "codeBlockHighlightStyle-filled",
+            },
+          ]}
+          value={getFormValue(
+            elements,
+            app,
+            (element) =>
+              (getCodeBlockStyle(element)?.highlightStyle as
+                | "outline"
+                | "glow"
+                | "filled") || "outline",
+            (element) => getCodeBlockStyle(element) !== null,
+            () => "outline",
+          )}
+          onChange={(next) => updateData(next)}
+        />
+      </div>
+    </fieldset>
+  ),
+});
+
+export const actionChangeCodeBlockHighlightRoundness = register<
+  "sharp" | "round"
+>({
+  name: "changeCodeBlockHighlightRoundness",
+  label: "codeBlock.highlightEdges",
+  trackEvent: false,
+  perform: (elements, appState, value) => {
+    return {
+      elements: changeProperty(
+        elements,
+        appState,
+        (el) =>
+          value && getCodeBlockStyle(el)
+            ? applyCodeBlockHighlightPatch(el, {
+                highlightBorderRadius: value === "round" ? 8 : 0,
+              })
+            : el,
+        true,
+      ),
+      appState,
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    };
+  },
+  PanelComponent: ({ elements, appState, updateData, app }) => (
+    <fieldset>
+      <legend>{t("codeBlock.highlightEdges")}</legend>
+      <div className="buttonList">
+        <RadioSelection
+          group="code-block-highlight-edges"
+          options={[
+            {
+              value: "sharp",
+              text: t("labels.sharp"),
+              icon: EdgeSharpIcon,
+            },
+            {
+              value: "round",
+              text: t("labels.round"),
+              icon: EdgeRoundIcon,
+            },
+          ]}
+          value={getFormValue(
+            elements,
+            app,
+            (element) => {
+              const r = getCodeBlockStyle(element)?.highlightBorderRadius ?? 0;
+              return r > 0 ? "round" : "sharp";
+            },
+            (element) => getCodeBlockStyle(element) !== null,
+            () => "sharp",
+          )}
+          onChange={(next) => updateData(next)}
+        />
       </div>
     </fieldset>
   ),
