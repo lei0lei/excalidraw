@@ -3,8 +3,67 @@ import { isDevEnv } from "@excalidraw/common";
 import type { NestedKeyOf } from "@excalidraw/common/utility-types";
 
 import { useAtomValue, editorJotaiStore, atom } from "./editor-jotai";
-import fallbackLangData from "./locales/en.json";
+import rawEnLocale from "./locales/en.json";
 import percentages from "./locales/percentages.json";
+
+/**
+ * Detect the loaded locale object (flat JSON root), not an ESM module wrapper.
+ * If we see these keys, we must not peel `default` — that would follow a real
+ * locale namespace key named `default` and break lookups like `codeBlock.*`.
+ */
+const hasLocaleRootKeys = (mod: unknown): boolean => {
+  if (!mod || typeof mod !== "object" || Array.isArray(mod)) {
+    return false;
+  }
+  const record = mod as Record<string, unknown>;
+  return (
+    "labels" in record ||
+    "codeBlock" in record ||
+    "buttons" in record ||
+    "toolBar" in record ||
+    "alerts" in record
+  );
+};
+
+/**
+ * True when `mod` is an ESM module object whose `default` is (or wraps) the flat
+ * locale JSON — not the locale object itself.
+ */
+const isEsmJsonModuleShell = (mod: unknown): mod is { default: object } => {
+  if (!mod || typeof mod !== "object" || Array.isArray(mod)) {
+    return false;
+  }
+  const record = mod as Record<string, unknown>;
+  if (hasLocaleRootKeys(record)) {
+    return false;
+  }
+  if (!("default" in record) || record.default === undefined) {
+    return false;
+  }
+  if (
+    typeof record.default !== "object" ||
+    record.default === null ||
+    Array.isArray(record.default)
+  ) {
+    return false;
+  }
+  const inner = record.default as Record<string, unknown>;
+  if (hasLocaleRootKeys(inner)) {
+    return true;
+  }
+  // Double-wrapped: { default: { default: locale } }
+  return "default" in inner;
+};
+
+const unwrapJsonLocaleModule = <T>(mod: T): T => {
+  let cur: unknown = mod;
+  while (isEsmJsonModuleShell(cur)) {
+    cur = (cur as { default: unknown }).default;
+  }
+  return cur as T;
+};
+
+const fallbackLangData = unwrapJsonLocaleModule(rawEnLocale);
 
 const COMPLETION_THRESHOLD = 85;
 
@@ -87,7 +146,7 @@ if (isDevEnv()) {
 }
 
 let currentLang: Language = defaultLang;
-let currentLangData = {};
+let currentLangData: typeof fallbackLangData = fallbackLangData;
 
 export const setLanguage = async (lang: Language) => {
   currentLang = lang;
@@ -95,10 +154,11 @@ export const setLanguage = async (lang: Language) => {
   document.documentElement.lang = currentLang.code;
 
   if (lang.code.startsWith(TEST_LANG_CODE)) {
-    currentLangData = {};
+    currentLangData = {} as typeof fallbackLangData;
   } else {
     try {
-      currentLangData = await import(`./locales/${currentLang.code}.json`);
+      const mod = await import(`./locales/${currentLang.code}.json`);
+      currentLangData = unwrapJsonLocaleModule(mod) as typeof fallbackLangData;
     } catch (error: any) {
       console.error(`Failed to load language ${lang.code}:`, error.message);
       currentLangData = fallbackLangData;
@@ -111,17 +171,21 @@ export const setLanguage = async (lang: Language) => {
 export const getLanguage = () => currentLang;
 
 const findPartsForData = (data: any, parts: string[]) => {
+  let node = unwrapJsonLocaleModule(data);
   for (let index = 0; index < parts.length; ++index) {
     const part = parts[index];
-    if (data[part] === undefined) {
+    if (node === undefined || node === null || typeof node !== "object") {
       return undefined;
     }
-    data = data[part];
+    if ((node as Record<string, unknown>)[part] === undefined) {
+      return undefined;
+    }
+    node = (node as Record<string, unknown>)[part];
   }
-  if (typeof data !== "string") {
+  if (typeof node !== "string") {
     return undefined;
   }
-  return data;
+  return node;
 };
 
 export const t = (
@@ -142,13 +206,9 @@ export const t = (
     findPartsForData(fallbackLangData, parts) ||
     fallback;
   if (translation === undefined) {
-    const errorMessage = `Can't find translation for ${path}`;
-    // in production, don't blow up the app on a missing translation key
-    if (import.meta.env.PROD) {
-      console.warn(errorMessage);
-      return "";
-    }
-    throw new Error(errorMessage);
+    // Never throw: missing keys should not crash the editor (dev or prod).
+    console.warn(`Can't find translation for ${path}`);
+    return "";
   }
 
   if (replacement) {

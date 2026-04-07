@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import "./UmlDiagramSidebar.scss";
 
-import type { UmlDiagramTemplateData } from "../templates/umlDiagram";
+import type { UmlDiagramTemplateData } from "../templates";
 
 type UmlDiagramSidebarProps = {
   data: UmlDiagramTemplateData | null;

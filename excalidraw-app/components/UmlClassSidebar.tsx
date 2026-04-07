@@ -7,7 +7,7 @@ import "./UmlClassSidebar.scss";
 import type {
   UmlClassTemplateData,
   UmlClassTemplateMember,
-} from "../templates/umlClass";
+} from "../templates";
 
 type UmlClassSidebarProps = {
   data: UmlClassTemplateData | null;

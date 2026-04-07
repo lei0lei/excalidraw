@@ -1,5 +1,5 @@
 import {
-  DEFAULT_FONT_FAMILY,
+  FONT_FAMILY,
   getFontString,
   getLineHeight,
   randomId,
@@ -20,6 +20,8 @@ import type {
   NonDeleted,
   NonDeletedExcalidrawElement,
 } from "@excalidraw/element/types";
+
+import { applyTemplateSceneUpdate } from "../shared/applyTemplateSceneUpdate";
 
 export const UML_DIAGRAM_TEMPLATE_TYPE = "uml-diagram";
 const UML_DIAGRAM_TEMPLATE_VERSION = 1;
@@ -57,6 +59,11 @@ type UmlDiagramChildElementIds = Partial<
   >
 >;
 
+/** After {@link resolveUmlDiagramChildElementIdsFromScene}, `labelTextId` is always set. */
+export type ResolvedUmlDiagramChildElementIds = UmlDiagramChildElementIds & {
+  labelTextId: string;
+};
+
 type UmlDiagramTemplateCustomData = {
   templateType?: string;
   templateVersion?: number;
@@ -78,6 +85,9 @@ type ElementsById = ReadonlyMap<string, ExcalidrawElement>;
 
 const STROKE_COLOR = "#111827";
 const TEXT_COLOR = "#1f2937";
+
+/** Sans “normal” font (Helvetica), not the app default handwritten Excalifont. */
+const UML_TEMPLATE_FONT_FAMILY = FONT_FAMILY.Helvetica;
 const UML_DIAGRAM_HORIZONTAL_PADDING = 72;
 const UML_DIAGRAM_VERTICAL_PADDING = 52;
 const UML_DIAGRAM_NOTE_HORIZONTAL_PADDING = 56;
@@ -173,6 +183,10 @@ export const getUmlDiagramTemplateRootId = (
     return null;
   }
 
+  if (customData.templateRole === "root") {
+    return element?.id ?? null;
+  }
+
   return customData.templateRootId || element?.id || null;
 };
 
@@ -212,10 +226,10 @@ const buildChildCustomData = (
 
 const getTextMetrics = (text: string, fontSize: number): TextMetrics => {
   const normalizedText = text || " ";
-  const lineHeight = getLineHeight(DEFAULT_FONT_FAMILY);
+  const lineHeight = getLineHeight(UML_TEMPLATE_FONT_FAMILY);
   const metrics = measureText(
     normalizedText,
-    getFontString({ fontFamily: DEFAULT_FONT_FAMILY, fontSize }),
+    getFontString({ fontFamily: UML_TEMPLATE_FONT_FAMILY, fontSize }),
     lineHeight,
   );
 
@@ -305,7 +319,7 @@ const createOrUpdateTextElement = (
     text: opts.text,
     originalText: opts.text,
     fontSize: opts.fontSize,
-    fontFamily: DEFAULT_FONT_FAMILY,
+    fontFamily: UML_TEMPLATE_FONT_FAMILY,
     textAlign: opts.textAlign,
     verticalAlign: "top",
     groupIds: opts.groupIds,
@@ -332,7 +346,7 @@ const createOrUpdateTextElement = (
     width: nextElement.width,
     height: nextElement.height,
     fontSize: nextElement.fontSize,
-    fontFamily: nextElement.fontFamily,
+    fontFamily: UML_TEMPLATE_FONT_FAMILY,
     textAlign: nextElement.textAlign,
     verticalAlign: nextElement.verticalAlign,
     lineHeight: nextElement.lineHeight,
@@ -481,13 +495,160 @@ const findElementByIdFromMap = <T extends ExcalidrawElement>(
   return (elementsById.get(id) as T | undefined) || null;
 };
 
-const getChildElementIds = (
-  rootCustomData: UmlDiagramTemplateCustomData,
-): UmlDiagramChildElementIds => ({
-  ...rootCustomData.childElementIds,
-  labelTextId: rootCustomData.childElementIds?.labelTextId || randomId(),
-  bodyTextId: rootCustomData.childElementIds?.bodyTextId || randomId(),
-});
+const diagramDecorationKeysForPreset = (
+  preset: UmlDiagramTemplatePreset,
+): (keyof UmlDiagramChildElementIds)[] => {
+  switch (preset) {
+    case "actor":
+      return [
+        "decoration1Id",
+        "decoration2Id",
+        "decoration3Id",
+        "decoration4Id",
+      ];
+    case "package":
+      return ["decoration1Id", "decoration2Id"];
+    case "note":
+      return ["decoration1Id", "decoration2Id", "decoration3Id"];
+    case "component":
+      return ["decoration1Id", "decoration2Id"];
+    case "sequence-lifeline":
+      return ["decoration1Id"];
+    default:
+      return [];
+  }
+};
+
+/**
+ * Stable child ids for diagram templates (avoids random ids each sync and duplicate stacked elements).
+ * Uses a single pass over `elementsById` to index candidates, then assigns slots (decorations still use a sorted pool).
+ */
+const resolveUmlDiagramChildElementIdsFromScene = (
+  root: NonDeletedExcalidrawElement,
+  elementsById: ElementsById,
+  preset: UmlDiagramTemplatePreset,
+): ResolvedUmlDiagramChildElementIds => {
+  const rootCustomData = getTemplateCustomData(root);
+  if (!rootCustomData || rootCustomData.templateRole !== "root") {
+    return { labelTextId: randomId() };
+  }
+
+  const rootId = root.id;
+  const rootRefs = new Set(
+    [rootId, rootCustomData.templateRootId].filter(
+      (x): x is string => typeof x === "string" && x.length > 0,
+    ),
+  );
+  const rootGroupIds = root.groupIds ?? [];
+  const stored = rootCustomData.childElementIds ?? {};
+
+  const labelsRootRef: string[] = [];
+  const labelsGroup: string[] = [];
+  const bodiesRootRef: string[] = [];
+  const decorationPool: string[] = [];
+
+  for (const [id, el] of elementsById) {
+    if (el.isDeleted) {
+      continue;
+    }
+    const cd = getTemplateCustomData(el);
+    if (!cd) {
+      continue;
+    }
+    const tr = cd.templateRootId;
+    if (cd.templateRole === "label") {
+      if (tr && rootRefs.has(tr)) {
+        labelsRootRef.push(id);
+      }
+      if (
+        rootGroupIds.length > 0 &&
+        el.groupIds?.some((g) => rootGroupIds.includes(g))
+      ) {
+        labelsGroup.push(id);
+      }
+    } else if (preset === "note" && cd.templateRole === "body") {
+      if (tr && rootRefs.has(tr)) {
+        bodiesRootRef.push(id);
+      }
+    } else if (cd.templateRole === "decoration") {
+      if (tr && rootRefs.has(tr)) {
+        decorationPool.push(id);
+      }
+    }
+  }
+  decorationPool.sort();
+
+  const resolveLabelTextId = (): string => {
+    if (stored.labelTextId && elementsById.has(stored.labelTextId)) {
+      const el = elementsById.get(stored.labelTextId)!;
+      if (!el.isDeleted) {
+        const cd = getTemplateCustomData(el);
+        if (cd?.templateRole === "label") {
+          return stored.labelTextId;
+        }
+      }
+    }
+    if (labelsRootRef.length > 0) {
+      return labelsRootRef[0];
+    }
+    if (labelsGroup.length > 0) {
+      return labelsGroup[0];
+    }
+    return stored.labelTextId || randomId();
+  };
+
+  const resolveBodyTextId = (): string | undefined => {
+    if (preset !== "note") {
+      return stored.bodyTextId;
+    }
+    if (stored.bodyTextId && elementsById.has(stored.bodyTextId)) {
+      const el = elementsById.get(stored.bodyTextId)!;
+      if (!el.isDeleted) {
+        const cd = getTemplateCustomData(el);
+        if (cd?.templateRole === "body") {
+          return stored.bodyTextId;
+        }
+      }
+    }
+    if (bodiesRootRef.length > 0) {
+      return bodiesRootRef[0];
+    }
+    return stored.bodyTextId || randomId();
+  };
+
+  const resolveDecorationIds = (): UmlDiagramChildElementIds => {
+    const keys = diagramDecorationKeysForPreset(preset);
+    const out: UmlDiagramChildElementIds = {};
+    const assigned = new Set<string>();
+    const pool = [...decorationPool];
+
+    for (const key of keys) {
+      const sid = stored[key];
+      if (sid && elementsById.has(sid)) {
+        const el = elementsById.get(sid)!;
+        if (!el.isDeleted) {
+          out[key] = sid;
+          assigned.add(sid);
+          continue;
+        }
+      }
+      const pick = pool.find((id) => !assigned.has(id));
+      if (pick) {
+        out[key] = pick;
+        assigned.add(pick);
+      } else {
+        out[key] = sid || randomId();
+      }
+    }
+    return out;
+  };
+
+  return {
+    labelTextId: resolveLabelTextId(),
+    ...(preset === "note" ? { bodyTextId: resolveBodyTextId() } : {}),
+    ...resolveDecorationIds(),
+  } as ResolvedUmlDiagramChildElementIds;
+};
 
 export const getUmlDiagramTemplateLayoutSignature = (
   root: ExcalidrawElement | null | undefined,
@@ -501,7 +662,12 @@ export const getUmlDiagramTemplateLayoutSignature = (
 
   const resolvedElementsById =
     elementsById || new Map<string, ExcalidrawElement>([[root.id, root]]);
-  const childElementIds = getChildElementIds(rootCustomData);
+  const data = normalizeUmlDiagramTemplateData(rootCustomData.templateData);
+  const childElementIds = resolveUmlDiagramChildElementIdsFromScene(
+    root as NonDeletedExcalidrawElement,
+    resolvedElementsById,
+    data.preset,
+  );
   const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
     resolvedElementsById,
     childElementIds.labelTextId,
@@ -510,7 +676,6 @@ export const getUmlDiagramTemplateLayoutSignature = (
     resolvedElementsById,
     childElementIds.bodyTextId,
   );
-  const data = normalizeUmlDiagramTemplateData(rootCustomData.templateData);
 
   return [
     root.id,
@@ -1049,6 +1214,462 @@ export const createUmlDiagramTemplate = (
       return createSequenceLifelineTemplate(x, y, data);
   }
 };
+
+type DiagramPresetUpdateContext = {
+  root: NonDeletedExcalidrawElement;
+  rootId: string;
+  rootCustomData: UmlDiagramTemplateCustomData;
+  groupIds: string[];
+  childElementIds: ResolvedUmlDiagramChildElementIds;
+  nextData: UmlDiagramTemplateData;
+  elementsById: ElementsById;
+  replacementMap: Map<string, ExcalidrawElement>;
+};
+
+const runDiagramActorUpdate = (ctx: DiagramPresetUpdateContext) => {
+  const {
+    root,
+    rootId,
+    groupIds,
+    childElementIds,
+    nextData,
+    elementsById,
+    replacementMap,
+  } = ctx;
+  const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
+    childElementIds.labelTextId,
+  );
+  const labelFontSize = labelElement?.fontSize || 18;
+  const nextRoot = newElementWith(root, {
+    groupIds,
+    customData: buildRootCustomData(rootId, nextData, childElementIds),
+  });
+  const label = createOrUpdateTextElement(labelElement, {
+    id: childElementIds.labelTextId,
+    x: root.x + root.width / 2,
+    y: root.y + 132,
+    text: nextData.label,
+    fontSize: labelFontSize,
+    textAlign: "center",
+    groupIds,
+    customData: buildChildCustomData(rootId, "label"),
+  });
+  replacementMap.set(rootId, nextRoot);
+  replacementMap.set(childElementIds.labelTextId, label);
+};
+
+const runDiagramUseCaseUpdate = (ctx: DiagramPresetUpdateContext) => {
+  const {
+    root,
+    rootId,
+    groupIds,
+    childElementIds,
+    nextData,
+    elementsById,
+    replacementMap,
+  } = ctx;
+  const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
+    childElementIds.labelTextId,
+  );
+  const labelFontSize = labelElement?.fontSize || 20;
+  const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
+  const nextWidth = Math.max(
+    220,
+    labelMetrics.width + UML_DIAGRAM_HORIZONTAL_PADDING,
+  );
+  const nextHeight = Math.max(110, labelMetrics.height + 44);
+  const nextRoot = newElementWith(root, {
+    width: nextWidth,
+    height: nextHeight,
+    groupIds,
+    customData: buildRootCustomData(rootId, nextData, childElementIds),
+  });
+  const label = createOrUpdateTextElement(labelElement, {
+    id: childElementIds.labelTextId,
+    x: root.x + nextWidth / 2,
+    y: root.y + (nextHeight - labelMetrics.height) / 2,
+    text: nextData.label,
+    fontSize: labelFontSize,
+    textAlign: "center",
+    groupIds,
+    customData: buildChildCustomData(rootId, "label"),
+  });
+  replacementMap.set(rootId, nextRoot);
+  replacementMap.set(childElementIds.labelTextId, label);
+};
+
+const runDiagramPackageUpdate = (ctx: DiagramPresetUpdateContext) => {
+  const {
+    root,
+    rootId,
+    groupIds,
+    childElementIds,
+    nextData,
+    elementsById,
+    replacementMap,
+  } = ctx;
+  const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
+    childElementIds.labelTextId,
+  );
+  const labelFontSize = labelElement?.fontSize || 18;
+  const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
+  const layout = getPackageLayout(labelMetrics);
+  const tabElement = findElementByIdFromMap<ExcalidrawElement>(
+    elementsById,
+    childElementIds.decoration1Id,
+  );
+  const keywordElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
+    childElementIds.decoration2Id,
+  );
+  const nextRoot = newElementWith(root, {
+    width: layout.width,
+    height: layout.height,
+    groupIds,
+    customData: buildRootCustomData(rootId, nextData, childElementIds),
+  });
+  const tab = createOrUpdateShape(tabElement, {
+    id: childElementIds.decoration1Id,
+    type: "rectangle",
+    x: root.x,
+    y: root.y - 24,
+    width: 86,
+    height: 26,
+    groupIds,
+    roundness: null,
+    customData: buildChildCustomData(rootId, "decoration"),
+  });
+  const keyword = createOrUpdateTextElement(keywordElement, {
+    id: childElementIds.decoration2Id,
+    x: root.x + 12,
+    y: root.y - 20,
+    text: "package",
+    fontSize: 15,
+    textAlign: "left",
+    groupIds,
+    customData: buildChildCustomData(rootId, "decoration"),
+  });
+  const label = createOrUpdateTextElement(labelElement, {
+    id: childElementIds.labelTextId,
+    x: root.x + layout.width / 2,
+    y: root.y - 24 + layout.labelY,
+    text: nextData.label,
+    fontSize: labelFontSize,
+    textAlign: "center",
+    groupIds,
+    customData: buildChildCustomData(rootId, "label"),
+  });
+  replacementMap.set(rootId, nextRoot);
+  replacementMap.set(childElementIds.decoration1Id!, tab);
+  replacementMap.set(childElementIds.decoration2Id!, keyword);
+  replacementMap.set(childElementIds.labelTextId, label);
+};
+
+const runDiagramNoteUpdate = (ctx: DiagramPresetUpdateContext) => {
+  const {
+    root,
+    rootId,
+    groupIds,
+    childElementIds,
+    nextData,
+    elementsById,
+    replacementMap,
+  } = ctx;
+  const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
+    childElementIds.labelTextId,
+  );
+  const bodyElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
+    childElementIds.bodyTextId,
+  );
+  const labelFontSize = labelElement?.fontSize || 18;
+  const bodyFontSize = bodyElement?.fontSize || 16;
+  const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
+  const bodyMetrics = getTextMetrics(nextData.body || "", bodyFontSize);
+  const nextWidth = Math.max(
+    190,
+    Math.max(labelMetrics.width, bodyMetrics.width) +
+      UML_DIAGRAM_NOTE_HORIZONTAL_PADDING,
+  );
+  const nextHeight = Math.max(
+    130,
+    labelMetrics.height +
+      bodyMetrics.height +
+      UML_DIAGRAM_NOTE_VERTICAL_PADDING,
+  );
+  const foldWidth = 38;
+  const foldHeight = 34;
+  const foldTop = findElementByIdFromMap<ExcalidrawLinearElement>(
+    elementsById,
+    childElementIds.decoration1Id,
+  );
+  const foldRight = findElementByIdFromMap<ExcalidrawLinearElement>(
+    elementsById,
+    childElementIds.decoration2Id,
+  );
+  const foldDiagonal = findElementByIdFromMap<ExcalidrawLinearElement>(
+    elementsById,
+    childElementIds.decoration3Id,
+  );
+
+  const nextRoot = newElementWith(root, {
+    width: nextWidth,
+    height: nextHeight,
+    groupIds,
+    customData: buildRootCustomData(rootId, nextData, childElementIds),
+  });
+  const nextLabel = createOrUpdateTextElement(labelElement, {
+    id: childElementIds.labelTextId,
+    x: root.x + 18,
+    y: root.y + 18,
+    text: nextData.label,
+    fontSize: labelFontSize,
+    textAlign: "left",
+    groupIds,
+    customData: buildChildCustomData(rootId, "label"),
+  });
+  const nextBody = createOrUpdateTextElement(bodyElement, {
+    id: childElementIds.bodyTextId,
+    x: root.x + 18,
+    y: root.y + 18 + labelMetrics.height + 16,
+    text: nextData.body || "",
+    fontSize: bodyFontSize,
+    textAlign: "left",
+    groupIds,
+    customData: buildChildCustomData(rootId, "body"),
+  });
+  const nextFoldTop = createOrUpdateLine(foldTop, {
+    id: childElementIds.decoration1Id,
+    type: "line",
+    x: root.x + nextWidth - foldWidth,
+    y: root.y,
+    width: foldWidth,
+    height: 0,
+    points: [
+      [0, 0],
+      [foldWidth, 0],
+    ],
+    groupIds,
+    customData: buildChildCustomData(rootId, "decoration"),
+  });
+  const nextFoldRight = createOrUpdateLine(foldRight, {
+    id: childElementIds.decoration2Id,
+    type: "line",
+    x: root.x + nextWidth,
+    y: root.y,
+    width: 0,
+    height: foldHeight,
+    points: [
+      [0, 0],
+      [0, foldHeight],
+    ],
+    groupIds,
+    customData: buildChildCustomData(rootId, "decoration"),
+  });
+  const nextFoldDiagonal = createOrUpdateLine(foldDiagonal, {
+    id: childElementIds.decoration3Id,
+    type: "line",
+    x: root.x + nextWidth - foldWidth,
+    y: root.y,
+    width: foldWidth,
+    height: foldHeight,
+    points: [
+      [0, 0],
+      [foldWidth, foldHeight],
+    ],
+    groupIds,
+    customData: buildChildCustomData(rootId, "decoration"),
+  });
+  replacementMap.set(rootId, nextRoot);
+  replacementMap.set(childElementIds.labelTextId, nextLabel);
+  replacementMap.set(childElementIds.bodyTextId!, nextBody);
+  replacementMap.set(childElementIds.decoration1Id!, nextFoldTop);
+  replacementMap.set(childElementIds.decoration2Id!, nextFoldRight);
+  replacementMap.set(childElementIds.decoration3Id!, nextFoldDiagonal);
+};
+
+const runDiagramComponentUpdate = (ctx: DiagramPresetUpdateContext) => {
+  const {
+    root,
+    rootId,
+    groupIds,
+    childElementIds,
+    nextData,
+    elementsById,
+    replacementMap,
+  } = ctx;
+  const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
+    childElementIds.labelTextId,
+  );
+  const labelFontSize = labelElement?.fontSize || 20;
+  const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
+  const layout = getComponentLayout(labelMetrics);
+  const port1 = findElementByIdFromMap<ExcalidrawElement>(
+    elementsById,
+    childElementIds.decoration1Id,
+  );
+  const port2 = findElementByIdFromMap<ExcalidrawElement>(
+    elementsById,
+    childElementIds.decoration2Id,
+  );
+  const nextRoot = newElementWith(root, {
+    width: layout.width,
+    height: layout.height,
+    groupIds,
+    customData: buildRootCustomData(rootId, nextData, childElementIds),
+  });
+  const nextPort1 = createOrUpdateShape(port1, {
+    id: childElementIds.decoration1Id,
+    type: "rectangle",
+    x: root.x + 14,
+    y: root.y + layout.portsTop,
+    width: 22,
+    height: 14,
+    groupIds,
+    roundness: null,
+    customData: buildChildCustomData(rootId, "decoration"),
+  });
+  const nextPort2 = createOrUpdateShape(port2, {
+    id: childElementIds.decoration2Id,
+    type: "rectangle",
+    x: root.x + 14,
+    y: root.y + layout.portsTop + 26,
+    width: 22,
+    height: 14,
+    groupIds,
+    roundness: null,
+    customData: buildChildCustomData(rootId, "decoration"),
+  });
+  const label = createOrUpdateTextElement(labelElement, {
+    id: childElementIds.labelTextId,
+    x: root.x + layout.width / 2,
+    y: root.y + (layout.height - labelMetrics.height) / 2,
+    text: nextData.label,
+    fontSize: labelFontSize,
+    textAlign: "center",
+    groupIds,
+    customData: buildChildCustomData(rootId, "label"),
+  });
+  replacementMap.set(rootId, nextRoot);
+  replacementMap.set(childElementIds.decoration1Id!, nextPort1);
+  replacementMap.set(childElementIds.decoration2Id!, nextPort2);
+  replacementMap.set(childElementIds.labelTextId, label);
+};
+
+const runDiagramRelationUpdate = (ctx: DiagramPresetUpdateContext) => {
+  const {
+    root,
+    rootId,
+    groupIds,
+    childElementIds,
+    nextData,
+    elementsById,
+    replacementMap,
+  } = ctx;
+  const nextRoot = newElementWith(root, {
+    groupIds,
+    customData: buildRootCustomData(rootId, nextData, childElementIds),
+  });
+  const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
+    childElementIds.labelTextId,
+  );
+  const labelFontSize = labelElement?.fontSize || 16;
+  const relationRoot = nextRoot as ExcalidrawLinearElement;
+  const labelPosition = getRelationLabelPosition(relationRoot);
+  const label = createOrUpdateTextElement(labelElement, {
+    id: childElementIds.labelTextId,
+    x: labelPosition.x,
+    y: labelPosition.y,
+    text: nextData.label,
+    fontSize: labelFontSize,
+    textAlign: "center",
+    groupIds,
+    customData: buildChildCustomData(rootId, "label"),
+  });
+  replacementMap.set(rootId, nextRoot);
+  replacementMap.set(childElementIds.labelTextId, label);
+};
+
+const runDiagramSequenceLifelineUpdate = (ctx: DiagramPresetUpdateContext) => {
+  const {
+    root,
+    rootId,
+    groupIds,
+    childElementIds,
+    nextData,
+    elementsById,
+    replacementMap,
+  } = ctx;
+  const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
+    elementsById,
+    childElementIds.labelTextId,
+  );
+  const labelFontSize = labelElement?.fontSize || 18;
+  const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
+  const layout = getSequenceLayout(labelMetrics);
+  const lifelineElement = findElementByIdFromMap<ExcalidrawLinearElement>(
+    elementsById,
+    childElementIds.decoration1Id,
+  );
+  const nextRoot = newElementWith(root, {
+    width: layout.width,
+    height: layout.headerHeight,
+    groupIds,
+    customData: buildRootCustomData(rootId, nextData, childElementIds),
+  });
+  const label = createOrUpdateTextElement(labelElement, {
+    id: childElementIds.labelTextId,
+    x: root.x + layout.width / 2,
+    y: root.y + (layout.headerHeight - labelMetrics.height) / 2,
+    text: nextData.label,
+    fontSize: labelFontSize,
+    textAlign: "center",
+    groupIds,
+    customData: buildChildCustomData(rootId, "label"),
+  });
+  const lifeline = createOrUpdateLine(lifelineElement, {
+    id: childElementIds.decoration1Id,
+    type: "line",
+    x: root.x + layout.width / 2,
+    y: root.y + layout.headerHeight,
+    width: 0,
+    height: layout.lineHeight,
+    points: [
+      [0, 0],
+      [0, layout.lineHeight],
+    ],
+    groupIds,
+    strokeStyle: "dashed",
+    customData: buildChildCustomData(rootId, "decoration"),
+  });
+  replacementMap.set(rootId, nextRoot);
+  replacementMap.set(childElementIds.labelTextId, label);
+  replacementMap.set(childElementIds.decoration1Id!, lifeline);
+};
+
+const DIAGRAM_PRESET_UPDATERS: Record<
+  UmlDiagramTemplatePreset,
+  (ctx: DiagramPresetUpdateContext) => void
+> = {
+  actor: runDiagramActorUpdate,
+  "use-case": runDiagramUseCaseUpdate,
+  package: runDiagramPackageUpdate,
+  note: runDiagramNoteUpdate,
+  component: runDiagramComponentUpdate,
+  association: runDiagramRelationUpdate,
+  inheritance: runDiagramRelationUpdate,
+  aggregation: runDiagramRelationUpdate,
+  composition: runDiagramRelationUpdate,
+  dependency: runDiagramRelationUpdate,
+  "sequence-lifeline": runDiagramSequenceLifelineUpdate,
+};
+
 export const updateUmlDiagramTemplateInSceneWithMap = (
   elements: readonly ExcalidrawElement[],
   rootId: string,
@@ -1067,389 +1688,29 @@ export const updateUmlDiagramTemplateInSceneWithMap = (
   );
   const nextData = normalizeUmlDiagramTemplateData(data, currentData.preset);
   const groupIds = root.groupIds?.length ? [...root.groupIds] : [rootId];
-  const childElementIds = {
-    ...rootCustomData.childElementIds,
-    labelTextId: rootCustomData.childElementIds?.labelTextId || randomId(),
-    bodyTextId: rootCustomData.childElementIds?.bodyTextId || randomId(),
-    decoration1Id: rootCustomData.childElementIds?.decoration1Id || randomId(),
-    decoration2Id: rootCustomData.childElementIds?.decoration2Id || randomId(),
-    decoration3Id: rootCustomData.childElementIds?.decoration3Id || randomId(),
-    decoration4Id: rootCustomData.childElementIds?.decoration4Id || randomId(),
-  } as UmlDiagramChildElementIds;
-  const replacementMap = new Map<string, ExcalidrawElement>();
-
-  if (currentData.preset === "actor") {
-    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
-      elementsById,
-      childElementIds.labelTextId,
-    );
-    const labelFontSize = labelElement?.fontSize || 18;
-    const nextRoot = newElementWith(root, {
-      groupIds,
-      customData: buildRootCustomData(rootId, nextData, childElementIds),
-    });
-    const label = createOrUpdateTextElement(labelElement, {
-      x: root.x + root.width / 2,
-      y: root.y + 132,
-      text: nextData.label,
-      fontSize: labelFontSize,
-      textAlign: "center",
-      groupIds,
-      customData: buildChildCustomData(rootId, "label"),
-    });
-    replacementMap.set(rootId, nextRoot);
-    replacementMap.set(label.id, label);
-  }
-
-  if (currentData.preset === "use-case") {
-    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
-      elementsById,
-      childElementIds.labelTextId,
-    );
-    const labelFontSize = labelElement?.fontSize || 20;
-    const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
-    const nextWidth = Math.max(
-      220,
-      labelMetrics.width + UML_DIAGRAM_HORIZONTAL_PADDING,
-    );
-    const nextHeight = Math.max(110, labelMetrics.height + 44);
-    const nextRoot = newElementWith(root, {
-      width: nextWidth,
-      height: nextHeight,
-      groupIds,
-      customData: buildRootCustomData(rootId, nextData, childElementIds),
-    });
-    const label = createOrUpdateTextElement(labelElement, {
-      x: root.x + nextWidth / 2,
-      y: root.y + (nextHeight - labelMetrics.height) / 2,
-      text: nextData.label,
-      fontSize: labelFontSize,
-      textAlign: "center",
-      groupIds,
-      customData: buildChildCustomData(rootId, "label"),
-    });
-    replacementMap.set(rootId, nextRoot);
-    replacementMap.set(label.id, label);
-  }
-
-  if (currentData.preset === "package") {
-    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
-      elementsById,
-      childElementIds.labelTextId,
-    );
-    const labelFontSize = labelElement?.fontSize || 18;
-    const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
-    const layout = getPackageLayout(labelMetrics);
-    const tabElement = findElementByIdFromMap<ExcalidrawElement>(
-      elementsById,
-      childElementIds.decoration1Id,
-    );
-    const keywordElement = findElementByIdFromMap<ExcalidrawTextElement>(
-      elementsById,
-      childElementIds.decoration2Id,
-    );
-    const nextRoot = newElementWith(root, {
-      width: layout.width,
-      height: layout.height,
-      groupIds,
-      customData: buildRootCustomData(rootId, nextData, childElementIds),
-    });
-    const tab = createOrUpdateShape(tabElement, {
-      id: childElementIds.decoration1Id,
-      type: "rectangle",
-      x: root.x,
-      y: root.y - 24,
-      width: 86,
-      height: 26,
-      groupIds,
-      roundness: null,
-      customData: buildChildCustomData(rootId, "decoration"),
-    });
-    const keyword = createOrUpdateTextElement(keywordElement, {
-      id: childElementIds.decoration2Id,
-      x: root.x + 12,
-      y: root.y - 20,
-      text: "package",
-      fontSize: 15,
-      textAlign: "left",
-      groupIds,
-      customData: buildChildCustomData(rootId, "decoration"),
-    });
-    const label = createOrUpdateTextElement(labelElement, {
-      x: root.x + layout.width / 2,
-      y: root.y - 24 + layout.labelY,
-      text: nextData.label,
-      fontSize: labelFontSize,
-      textAlign: "center",
-      groupIds,
-      customData: buildChildCustomData(rootId, "label"),
-    });
-    replacementMap.set(rootId, nextRoot);
-    replacementMap.set(tab.id, tab);
-    replacementMap.set(keyword.id, keyword);
-    replacementMap.set(label.id, label);
-  }
-
-  if (currentData.preset === "note") {
-    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
-      elementsById,
-      childElementIds.labelTextId,
-    );
-    const bodyElement = findElementByIdFromMap<ExcalidrawTextElement>(
-      elementsById,
-      childElementIds.bodyTextId,
-    );
-    const labelFontSize = labelElement?.fontSize || 18;
-    const bodyFontSize = bodyElement?.fontSize || 16;
-    const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
-    const bodyMetrics = getTextMetrics(nextData.body || "", bodyFontSize);
-    const nextWidth = Math.max(
-      190,
-      Math.max(labelMetrics.width, bodyMetrics.width) +
-        UML_DIAGRAM_NOTE_HORIZONTAL_PADDING,
-    );
-    const nextHeight = Math.max(
-      130,
-      labelMetrics.height +
-        bodyMetrics.height +
-        UML_DIAGRAM_NOTE_VERTICAL_PADDING,
-    );
-    const foldWidth = 38;
-    const foldHeight = 34;
-    const foldTop = findElementByIdFromMap<ExcalidrawLinearElement>(
-      elementsById,
-      childElementIds.decoration1Id,
-    );
-    const foldRight = findElementByIdFromMap<ExcalidrawLinearElement>(
-      elementsById,
-      childElementIds.decoration2Id,
-    );
-    const foldDiagonal = findElementByIdFromMap<ExcalidrawLinearElement>(
-      elementsById,
-      childElementIds.decoration3Id,
-    );
-
-    const nextRoot = newElementWith(root, {
-      width: nextWidth,
-      height: nextHeight,
-      groupIds,
-      customData: buildRootCustomData(rootId, nextData, childElementIds),
-    });
-    const nextLabel = createOrUpdateTextElement(labelElement, {
-      x: root.x + 18,
-      y: root.y + 18,
-      text: nextData.label,
-      fontSize: labelFontSize,
-      textAlign: "left",
-      groupIds,
-      customData: buildChildCustomData(rootId, "label"),
-    });
-    const nextBody = createOrUpdateTextElement(bodyElement, {
-      x: root.x + 18,
-      y: root.y + 18 + labelMetrics.height + 16,
-      text: nextData.body || "",
-      fontSize: bodyFontSize,
-      textAlign: "left",
-      groupIds,
-      customData: buildChildCustomData(rootId, "body"),
-    });
-    const nextFoldTop = createOrUpdateLine(foldTop, {
-      id: childElementIds.decoration1Id,
-      type: "line",
-      x: root.x + nextWidth - foldWidth,
-      y: root.y,
-      width: foldWidth,
-      height: 0,
-      points: [
-        [0, 0],
-        [foldWidth, 0],
-      ],
-      groupIds,
-      customData: buildChildCustomData(rootId, "decoration"),
-    });
-    const nextFoldRight = createOrUpdateLine(foldRight, {
-      id: childElementIds.decoration2Id,
-      type: "line",
-      x: root.x + nextWidth,
-      y: root.y,
-      width: 0,
-      height: foldHeight,
-      points: [
-        [0, 0],
-        [0, foldHeight],
-      ],
-      groupIds,
-      customData: buildChildCustomData(rootId, "decoration"),
-    });
-    const nextFoldDiagonal = createOrUpdateLine(foldDiagonal, {
-      id: childElementIds.decoration3Id,
-      type: "line",
-      x: root.x + nextWidth - foldWidth,
-      y: root.y,
-      width: foldWidth,
-      height: foldHeight,
-      points: [
-        [0, 0],
-        [foldWidth, foldHeight],
-      ],
-      groupIds,
-      customData: buildChildCustomData(rootId, "decoration"),
-    });
-    replacementMap.set(rootId, nextRoot);
-    replacementMap.set(nextLabel.id, nextLabel);
-    replacementMap.set(nextBody.id, nextBody);
-    replacementMap.set(nextFoldTop.id, nextFoldTop);
-    replacementMap.set(nextFoldRight.id, nextFoldRight);
-    replacementMap.set(nextFoldDiagonal.id, nextFoldDiagonal);
-  }
-  if (currentData.preset === "component") {
-    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
-      elementsById,
-      childElementIds.labelTextId,
-    );
-    const labelFontSize = labelElement?.fontSize || 20;
-    const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
-    const layout = getComponentLayout(labelMetrics);
-    const port1 = findElementByIdFromMap<ExcalidrawElement>(
-      elementsById,
-      childElementIds.decoration1Id,
-    );
-    const port2 = findElementByIdFromMap<ExcalidrawElement>(
-      elementsById,
-      childElementIds.decoration2Id,
-    );
-    const nextRoot = newElementWith(root, {
-      width: layout.width,
-      height: layout.height,
-      groupIds,
-      customData: buildRootCustomData(rootId, nextData, childElementIds),
-    });
-    const nextPort1 = createOrUpdateShape(port1, {
-      id: childElementIds.decoration1Id,
-      type: "rectangle",
-      x: root.x + 14,
-      y: root.y + layout.portsTop,
-      width: 22,
-      height: 14,
-      groupIds,
-      roundness: null,
-      customData: buildChildCustomData(rootId, "decoration"),
-    });
-    const nextPort2 = createOrUpdateShape(port2, {
-      id: childElementIds.decoration2Id,
-      type: "rectangle",
-      x: root.x + 14,
-      y: root.y + layout.portsTop + 26,
-      width: 22,
-      height: 14,
-      groupIds,
-      roundness: null,
-      customData: buildChildCustomData(rootId, "decoration"),
-    });
-    const label = createOrUpdateTextElement(labelElement, {
-      x: root.x + layout.width / 2,
-      y: root.y + (layout.height - labelMetrics.height) / 2,
-      text: nextData.label,
-      fontSize: labelFontSize,
-      textAlign: "center",
-      groupIds,
-      customData: buildChildCustomData(rootId, "label"),
-    });
-    replacementMap.set(rootId, nextRoot);
-    replacementMap.set(nextPort1.id, nextPort1);
-    replacementMap.set(nextPort2.id, nextPort2);
-    replacementMap.set(label.id, label);
-  }
-
-  if (
-    currentData.preset === "association" ||
-    currentData.preset === "inheritance" ||
-    currentData.preset === "aggregation" ||
-    currentData.preset === "composition" ||
-    currentData.preset === "dependency"
-  ) {
-    const nextRoot = newElementWith(root, {
-      groupIds,
-      customData: buildRootCustomData(rootId, nextData, childElementIds),
-    });
-    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
-      elementsById,
-      childElementIds.labelTextId,
-    );
-    const labelFontSize = labelElement?.fontSize || 16;
-    const relationRoot = nextRoot as ExcalidrawLinearElement;
-    const labelPosition = getRelationLabelPosition(relationRoot);
-    const label = createOrUpdateTextElement(labelElement, {
-      x: labelPosition.x,
-      y: labelPosition.y,
-      text: nextData.label,
-      fontSize: labelFontSize,
-      textAlign: "center",
-      groupIds,
-      customData: buildChildCustomData(rootId, "label"),
-    });
-    replacementMap.set(rootId, nextRoot);
-    replacementMap.set(label.id, label);
-  }
-
-  if (currentData.preset === "sequence-lifeline") {
-    const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
-      elementsById,
-      childElementIds.labelTextId,
-    );
-    const labelFontSize = labelElement?.fontSize || 18;
-    const labelMetrics = getTextMetrics(nextData.label, labelFontSize);
-    const layout = getSequenceLayout(labelMetrics);
-    const lifelineElement = findElementByIdFromMap<ExcalidrawLinearElement>(
-      elementsById,
-      childElementIds.decoration1Id,
-    );
-    const nextRoot = newElementWith(root, {
-      width: layout.width,
-      height: layout.headerHeight,
-      groupIds,
-      customData: buildRootCustomData(rootId, nextData, childElementIds),
-    });
-    const label = createOrUpdateTextElement(labelElement, {
-      x: root.x + layout.width / 2,
-      y: root.y + (layout.headerHeight - labelMetrics.height) / 2,
-      text: nextData.label,
-      fontSize: labelFontSize,
-      textAlign: "center",
-      groupIds,
-      customData: buildChildCustomData(rootId, "label"),
-    });
-    const lifeline = createOrUpdateLine(lifelineElement, {
-      id: childElementIds.decoration1Id,
-      type: "line",
-      x: root.x + layout.width / 2,
-      y: root.y + layout.headerHeight,
-      width: 0,
-      height: layout.lineHeight,
-      points: [
-        [0, 0],
-        [0, layout.lineHeight],
-      ],
-      groupIds,
-      strokeStyle: "dashed",
-      customData: buildChildCustomData(rootId, "decoration"),
-    });
-    replacementMap.set(rootId, nextRoot);
-    replacementMap.set(label.id, label);
-    replacementMap.set(lifeline.id, lifeline);
-  }
-
-  const nextElements = elements.map(
-    (element) => replacementMap.get(element.id) || element,
+  const childElementIds = resolveUmlDiagramChildElementIdsFromScene(
+    root as NonDeletedExcalidrawElement,
+    elementsById,
+    currentData.preset,
   );
+  const replacementMap = new Map<string, ExcalidrawElement>();
+  const ctx: DiagramPresetUpdateContext = {
+    root: root as NonDeletedExcalidrawElement,
+    rootId,
+    rootCustomData,
+    groupIds,
+    childElementIds,
+    nextData,
+    elementsById,
+    replacementMap,
+  };
+  DIAGRAM_PRESET_UPDATERS[currentData.preset](ctx);
 
-  replacementMap.forEach((element, id) => {
-    if (!elementsById.has(id)) {
-      nextElements.push(element);
-    }
+  return applyTemplateSceneUpdate({
+    elements,
+    elementsById,
+    replacementMap,
   });
-
-  return nextElements;
 };
 
 export const updateUmlDiagramTemplateInScene = (
@@ -1477,7 +1738,11 @@ export const syncUmlDiagramTemplateLayoutInSceneWithMap = (
   }
 
   const data = normalizeUmlDiagramTemplateData(rootCustomData.templateData);
-  const childElementIds = getChildElementIds(rootCustomData);
+  const childElementIds = resolveUmlDiagramChildElementIdsFromScene(
+    root as NonDeletedExcalidrawElement,
+    elementsById,
+    data.preset,
+  );
   const labelElement = findElementByIdFromMap<ExcalidrawTextElement>(
     elementsById,
     childElementIds.labelTextId,
@@ -1579,6 +1844,79 @@ export const syncUmlDiagramTemplateLayoutInScene = (
     buildElementsById(elements),
   );
 
+const isUmlDiagramTemplateRootElement = (
+  element: ExcalidrawElement | null | undefined,
+): boolean => {
+  const customData = getTemplateCustomData(element);
+  return !!customData && customData.templateRole === "root";
+};
+
+const findUmlDiagramRootIdBySharedGroupIds = (
+  element: NonDeletedExcalidrawElement,
+  elementsById: ElementsById,
+): string | null => {
+  const gids = element.groupIds ?? [];
+  if (!gids.length) {
+    return null;
+  }
+
+  let found: string | null = null;
+  for (const [, candidate] of elementsById) {
+    if (candidate.isDeleted) {
+      continue;
+    }
+    if (!isUmlDiagramTemplateRootElement(candidate)) {
+      continue;
+    }
+    const cg = candidate.groupIds ?? [];
+    if (!cg.length) {
+      continue;
+    }
+    if (gids.some((id) => cg.includes(id))) {
+      if (found && found !== candidate.id) {
+        return null;
+      }
+      found = candidate.id;
+    }
+  }
+
+  return found;
+};
+
+const resolveUmlDiagramTemplateRootIdFromSelection = (
+  element: NonDeletedExcalidrawElement,
+  elementsById: ElementsById,
+): string | null => {
+  if (isUmlDiagramTemplateRootElement(element)) {
+    return element.id;
+  }
+
+  const directRootId = getUmlDiagramTemplateRootId(element);
+  if (directRootId) {
+    const root = findElementByIdFromMap(elementsById, directRootId);
+    if (root && !root.isDeleted && isUmlDiagramTemplateRootElement(root)) {
+      return directRootId;
+    }
+  }
+
+  const groupRootId = element.groupIds?.[0];
+  if (typeof groupRootId === "string") {
+    const candidate = findElementByIdFromMap<NonDeletedExcalidrawElement>(
+      elementsById,
+      groupRootId,
+    );
+    if (
+      candidate &&
+      !candidate.isDeleted &&
+      isUmlDiagramTemplateRootElement(candidate)
+    ) {
+      return groupRootId;
+    }
+  }
+
+  return findUmlDiagramRootIdBySharedGroupIds(element, elementsById);
+};
+
 export const resolveSelectedUmlDiagramTemplateRootWithMap = (
   elementsById: ElementsById,
   selectedElementIds: AppStateSelection | null | undefined,
@@ -1614,11 +1952,13 @@ export const resolveSelectedUmlDiagramTemplateRootWithMap = (
   const rootIds = new Set<string>();
 
   for (const element of selectedElements) {
-    const rootId = getUmlDiagramTemplateRootId(element);
-    if (!rootId) {
-      return null;
+    const rootId = resolveUmlDiagramTemplateRootIdFromSelection(
+      element,
+      elementsById,
+    );
+    if (rootId) {
+      rootIds.add(rootId);
     }
-    rootIds.add(rootId);
   }
 
   if (rootIds.size !== 1) {

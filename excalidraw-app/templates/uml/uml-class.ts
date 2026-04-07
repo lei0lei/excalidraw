@@ -1,5 +1,5 @@
 import {
-  DEFAULT_FONT_FAMILY,
+  FONT_FAMILY,
   getFontString,
   getLineHeight,
   randomId,
@@ -20,6 +20,8 @@ import type {
   NonDeletedExcalidrawElement,
 } from "@excalidraw/element/types";
 
+import { applyTemplateSceneUpdate } from "../shared/applyTemplateSceneUpdate";
+
 export const UML_CLASS_TEMPLATE_TYPE = "uml-class";
 export type UmlClassTemplatePreset =
   | "class"
@@ -36,6 +38,9 @@ const UML_CLASS_SECTION_GAP = 10;
 const UML_CLASS_MIN_SECTION_HEIGHT = 28;
 const UML_CLASS_SAFE_BORDER_PADDING = 18;
 const UML_CLASS_DIVIDER_INSET = 1;
+
+/** Sans “normal” font (Helvetica), not the app default handwritten Excalifont. */
+const UML_TEMPLATE_FONT_FAMILY = FONT_FAMILY.Helvetica;
 
 type UmlClassTemplateRole =
   | "root"
@@ -64,6 +69,9 @@ type UmlClassChildElementIds = {
   dividerAttributesId: string;
   dividerMethodsId: string;
 };
+
+/** Populated by {@link resolveUmlClassChildElementIdsFromScene} for template updates. */
+export type ResolvedUmlClassChildElementIds = UmlClassChildElementIds;
 
 type UmlClassTemplateCustomData = {
   templateType?: string;
@@ -214,7 +222,7 @@ const buildTitleText = (data: UmlClassTemplateData) =>
   data.stereotype ? `<<${data.stereotype}>>\n${data.name}` : data.name;
 
 const getTextMetrics = (text: string, fontSize: number) => {
-  const fontFamily = DEFAULT_FONT_FAMILY;
+  const fontFamily = UML_TEMPLATE_FONT_FAMILY;
   const lineHeight = getLineHeight(fontFamily);
   const normalizedText = text || " ";
   const metrics = measureText(
@@ -319,6 +327,12 @@ export const getUmlClassTemplateRootId = (
     return null;
   }
 
+  // The scene root rectangle must be identified by its current element id. Stale
+  // templateRootId (e.g. after paste/duplicate) points at a non-existent id and breaks selection.
+  if (customData.templateRole === "root") {
+    return element?.id ?? null;
+  }
+
   return customData.templateRootId || element?.id || null;
 };
 
@@ -391,7 +405,7 @@ const createOrUpdateTextElement = (
     text: opts.text,
     originalText: opts.text,
     fontSize: opts.fontSize,
-    fontFamily: DEFAULT_FONT_FAMILY,
+    fontFamily: UML_TEMPLATE_FONT_FAMILY,
     textAlign: opts.textAlign,
     verticalAlign: "top",
     groupIds: opts.groupIds,
@@ -418,7 +432,7 @@ const createOrUpdateTextElement = (
     width: nextElement.width,
     height: nextElement.height,
     fontSize: nextElement.fontSize,
-    fontFamily: nextElement.fontFamily,
+    fontFamily: UML_TEMPLATE_FONT_FAMILY,
     textAlign: nextElement.textAlign,
     verticalAlign: nextElement.verticalAlign,
     lineHeight: nextElement.lineHeight,
@@ -604,18 +618,99 @@ const findElementByIdFromMap = <T extends ExcalidrawElement>(
   return (elementsById.get(id) as T | undefined) || null;
 };
 
-const getChildElementIds = (
-  rootCustomData: UmlClassTemplateCustomData,
-): UmlClassChildElementIds => ({
-  titleTextId: rootCustomData.childElementIds?.titleTextId || randomId(),
-  attributesTextId:
-    rootCustomData.childElementIds?.attributesTextId || randomId(),
-  methodsTextId: rootCustomData.childElementIds?.methodsTextId || randomId(),
-  dividerAttributesId:
-    rootCustomData.childElementIds?.dividerAttributesId || randomId(),
-  dividerMethodsId:
-    rootCustomData.childElementIds?.dividerMethodsId || randomId(),
-});
+/**
+ * Resolves stable child element ids from the root's customData and the live scene.
+ * Avoids `randomId()` on every call (which caused duplicate stacked parts and default “handwritten” text on each sync).
+ */
+const resolveUmlClassChildElementIdsFromScene = (
+  root: NonDeletedExcalidrawElement,
+  elementsById: ElementsById,
+): ResolvedUmlClassChildElementIds => {
+  const rootCustomData = getTemplateCustomData(root);
+  if (!rootCustomData || rootCustomData.templateRole !== "root") {
+    return {
+      titleTextId: randomId(),
+      attributesTextId: randomId(),
+      methodsTextId: randomId(),
+      dividerAttributesId: randomId(),
+      dividerMethodsId: randomId(),
+    };
+  }
+
+  const rootId = root.id;
+  const rootRefs = new Set(
+    [rootId, rootCustomData.templateRootId].filter(
+      (x): x is string => typeof x === "string" && x.length > 0,
+    ),
+  );
+  const rootGroupIds = root.groupIds ?? [];
+  const stored = rootCustomData.childElementIds;
+
+  type ClassChildRole = Exclude<UmlClassTemplateRole, "root">;
+  const emptyRoleLists = (): Record<ClassChildRole, string[]> => ({
+    title: [],
+    attributes: [],
+    methods: [],
+    "divider-attributes": [],
+    "divider-methods": [],
+  });
+  const withRootRef = emptyRoleLists();
+  const withGroup = emptyRoleLists();
+
+  for (const [id, el] of elementsById) {
+    if (el.isDeleted) {
+      continue;
+    }
+    const cd = getTemplateCustomData(el);
+    if (!cd || cd.templateRole === "root" || !cd.templateRole) {
+      continue;
+    }
+    const role = cd.templateRole as ClassChildRole;
+    if (cd.templateRootId && rootRefs.has(cd.templateRootId)) {
+      withRootRef[role].push(id);
+    }
+    if (
+      rootGroupIds.length > 0 &&
+      el.groupIds?.some((g) => rootGroupIds.includes(g))
+    ) {
+      withGroup[role].push(id);
+    }
+  }
+
+  const resolveRole = (
+    role: ClassChildRole,
+    key: keyof UmlClassChildElementIds,
+  ): string => {
+    const preferredId = stored?.[key];
+    if (preferredId && elementsById.has(preferredId)) {
+      const el = elementsById.get(preferredId)!;
+      if (!el.isDeleted) {
+        const cd = getTemplateCustomData(el);
+        if (cd?.templateRole === role) {
+          return preferredId;
+        }
+      }
+    }
+    if (withRootRef[role].length > 0) {
+      return withRootRef[role][0];
+    }
+    if (withGroup[role].length > 0) {
+      return withGroup[role][0];
+    }
+    return preferredId || randomId();
+  };
+
+  return {
+    titleTextId: resolveRole("title", "titleTextId"),
+    attributesTextId: resolveRole("attributes", "attributesTextId"),
+    methodsTextId: resolveRole("methods", "methodsTextId"),
+    dividerAttributesId: resolveRole(
+      "divider-attributes",
+      "dividerAttributesId",
+    ),
+    dividerMethodsId: resolveRole("divider-methods", "dividerMethodsId"),
+  };
+};
 
 const serializeMembersForSignature = (members: UmlClassTemplateMember[]) =>
   members.map((member) => member.text).join("\n");
@@ -632,7 +727,10 @@ export const getUmlClassTemplateLayoutSignature = (
 
   const resolvedElementsById =
     elementsById || new Map<string, ExcalidrawElement>([[root.id, root]]);
-  const childElementIds = getChildElementIds(rootCustomData);
+  const childElementIds = resolveUmlClassChildElementIdsFromScene(
+    root as NonDeletedExcalidrawElement,
+    resolvedElementsById,
+  );
   const titleElement = findElementByIdFromMap<ExcalidrawTextElement>(
     resolvedElementsById,
     childElementIds.titleTextId,
@@ -675,7 +773,10 @@ export const updateUmlClassTemplateInSceneWithMap = (
   }
 
   const normalizedData = normalizeUmlClassTemplateData(data);
-  const childElementIds = getChildElementIds(rootCustomData);
+  const childElementIds = resolveUmlClassChildElementIdsFromScene(
+    root as NonDeletedExcalidrawElement,
+    elementsById,
+  );
   const groupIds = root.groupIds?.length ? [...root.groupIds] : [rootId];
   const titleElement = findElementByIdFromMap<ExcalidrawTextElement>(
     elementsById,
@@ -713,6 +814,7 @@ export const updateUmlClassTemplateInSceneWithMap = (
   });
 
   const nextTitle = createOrUpdateTextElement(titleElement, {
+    id: childElementIds.titleTextId,
     x: root.x + layout.width / 2,
     y: root.y + layout.titleY,
     text: buildTitleText(normalizedData),
@@ -723,6 +825,7 @@ export const updateUmlClassTemplateInSceneWithMap = (
   });
 
   const nextAttributes = createOrUpdateTextElement(attributesElement, {
+    id: childElementIds.attributesTextId,
     x: root.x + UML_CLASS_PADDING_X,
     y: root.y + layout.attributesY,
     text: formatMembers(normalizedData.attributes),
@@ -733,6 +836,7 @@ export const updateUmlClassTemplateInSceneWithMap = (
   });
 
   const nextMethods = createOrUpdateTextElement(methodsElement, {
+    id: childElementIds.methodsTextId,
     x: root.x + UML_CLASS_PADDING_X,
     y: root.y + layout.methodsY,
     text: formatMembers(normalizedData.methods),
@@ -745,6 +849,7 @@ export const updateUmlClassTemplateInSceneWithMap = (
   const nextDividerAttributes = createOrUpdateDivider(
     dividerAttributesElement,
     {
+      id: childElementIds.dividerAttributesId,
       x: root.x + UML_CLASS_DIVIDER_INSET,
       y: root.y + layout.dividerAttributesY,
       width: layout.width,
@@ -754,6 +859,7 @@ export const updateUmlClassTemplateInSceneWithMap = (
   );
 
   const nextDividerMethods = createOrUpdateDivider(dividerMethodsElement, {
+    id: childElementIds.dividerMethodsId,
     x: root.x + UML_CLASS_DIVIDER_INSET,
     y: root.y + layout.dividerMethodsY,
     width: layout.width,
@@ -770,17 +876,11 @@ export const updateUmlClassTemplateInSceneWithMap = (
     [childElementIds.dividerMethodsId, nextDividerMethods],
   ]);
 
-  const nextElements = elements.map(
-    (element) => replacementMap.get(element.id) || element,
-  );
-
-  replacementMap.forEach((element, id) => {
-    if (!elementsById.has(id)) {
-      nextElements.push(element);
-    }
+  return applyTemplateSceneUpdate({
+    elements,
+    elementsById,
+    replacementMap,
   });
-
-  return nextElements;
 };
 
 export const updateUmlClassTemplateInScene = (
@@ -808,7 +908,10 @@ export const syncUmlClassTemplateLayoutInSceneWithMap = (
   }
 
   const data = normalizeUmlClassTemplateData(rootCustomData.templateData);
-  const childElementIds = getChildElementIds(rootCustomData);
+  const childElementIds = resolveUmlClassChildElementIdsFromScene(
+    root as NonDeletedExcalidrawElement,
+    elementsById,
+  );
 
   const titleElement = findElementByIdFromMap<ExcalidrawTextElement>(
     elementsById,
@@ -860,6 +963,81 @@ export const syncUmlClassTemplateLayoutInScene = (
     buildElementsById(elements),
   );
 
+const isUmlClassTemplateRootElement = (
+  element: ExcalidrawElement | null | undefined,
+): boolean => {
+  const customData = getTemplateCustomData(element);
+  return !!customData && customData.templateRole === "root";
+};
+
+/** When templateRootId on children is stale, find the UML root that shares any group id with this element. */
+const findUmlClassRootIdBySharedGroupIds = (
+  element: NonDeletedExcalidrawElement,
+  elementsById: ElementsById,
+): string | null => {
+  const gids = element.groupIds ?? [];
+  if (!gids.length) {
+    return null;
+  }
+
+  let found: string | null = null;
+  for (const [, candidate] of elementsById) {
+    if (candidate.isDeleted) {
+      continue;
+    }
+    if (!isUmlClassTemplateRootElement(candidate)) {
+      continue;
+    }
+    const cg = candidate.groupIds ?? [];
+    if (!cg.length) {
+      continue;
+    }
+    if (gids.some((id) => cg.includes(id))) {
+      if (found && found !== candidate.id) {
+        return null;
+      }
+      found = candidate.id;
+    }
+  }
+
+  return found;
+};
+
+/** Resolves the UML class template root id for a selected element, including legacy scenes where child shapes lost template customData but still share groupIds with the root. */
+const resolveUmlClassTemplateRootIdFromSelection = (
+  element: NonDeletedExcalidrawElement,
+  elementsById: ElementsById,
+): string | null => {
+  if (isUmlClassTemplateRootElement(element)) {
+    return element.id;
+  }
+
+  const directRootId = getUmlClassTemplateRootId(element);
+  if (directRootId) {
+    const root = findElementByIdFromMap(elementsById, directRootId);
+    if (root && !root.isDeleted && isUmlClassTemplateRootElement(root)) {
+      return directRootId;
+    }
+  }
+
+  const groupRootId = element.groupIds?.[0];
+  if (typeof groupRootId === "string") {
+    const candidate = findElementByIdFromMap<NonDeletedExcalidrawElement>(
+      elementsById,
+      groupRootId,
+    );
+    if (
+      candidate &&
+      !candidate.isDeleted &&
+      isUmlClassTemplateRootElement(candidate)
+    ) {
+      return groupRootId;
+    }
+  }
+
+  return findUmlClassRootIdBySharedGroupIds(element, elementsById);
+};
+
 export const resolveSelectedUmlClassTemplateRootWithMap = (
   elementsById: ElementsById,
   selectedElementIds: AppStateSelection | null | undefined,
@@ -895,11 +1073,13 @@ export const resolveSelectedUmlClassTemplateRootWithMap = (
   const rootIds = new Set<string>();
 
   for (const element of selectedElements) {
-    const rootIdForElement = getUmlClassTemplateRootId(element);
-    if (!rootIdForElement) {
-      return null;
+    const rootIdForElement = resolveUmlClassTemplateRootIdFromSelection(
+      element,
+      elementsById,
+    );
+    if (rootIdForElement) {
+      rootIds.add(rootIdForElement);
     }
-    rootIds.add(rootIdForElement);
   }
 
   if (rootIds.size !== 1) {

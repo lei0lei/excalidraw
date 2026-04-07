@@ -4,8 +4,10 @@ import { useState } from "react";
 
 import "./TemplateLibraryDialog.scss";
 
-import type { UmlClassTemplatePreset } from "../templates/umlClass";
-import type { UmlDiagramTemplatePreset } from "../templates/umlDiagram";
+import type {
+  UmlClassTemplatePreset,
+  UmlDiagramTemplatePreset,
+} from "../templates";
 
 type TemplateLibraryDialogProps = {
   onClose: () => void;

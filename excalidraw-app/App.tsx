@@ -147,6 +147,14 @@ import { TemplateLibraryDialog } from "./components/TemplateLibraryDialog";
 
 import "./index.scss";
 
+import { useEmbeddableToolbarSync } from "./hooks/useEmbeddableToolbarSync";
+import { useUmlTemplateSceneSync } from "./hooks/useUmlTemplateSceneSync";
+import {
+  getCodeBlockElementData,
+  getMathFormulaElementData,
+  resolveCodeBlockHighlightColorFromSidebar,
+  resolveMathFormulaColorFromSidebar,
+} from "./embeddable/elementData";
 import { AppSidebar } from "./components/AppSidebar";
 import { WorkspacePage } from "./workspace/WorkspacePage";
 import {
@@ -182,27 +190,18 @@ import {
 import {
   createDefaultUmlClassTemplateData,
   createUmlClassTemplate,
-  getUmlClassTemplateData,
-  getUmlClassTemplateLayoutSignature,
-  getUmlClassTemplateRootId,
-  resolveSelectedUmlClassTemplateRootWithMap,
-  syncUmlClassTemplateLayoutInSceneWithMap,
-  updateUmlClassTemplateInScene,
-  type UmlClassTemplateData,
-  type UmlClassTemplatePreset,
-} from "./templates/umlClass";
-import {
   createUmlDiagramTemplate,
+  getUmlClassTemplateRootId,
   getUmlDiagramTemplateData,
-  getUmlDiagramTemplateLayoutSignature,
   getUmlDiagramTemplateRootId,
   isEditableUmlDiagramTemplatePreset,
-  resolveSelectedUmlDiagramTemplateRootWithMap,
-  syncUmlDiagramTemplateLayoutInSceneWithMap,
+  updateUmlClassTemplateInScene,
   updateUmlDiagramTemplateInScene,
+  type UmlClassTemplateData,
+  type UmlClassTemplatePreset,
   type UmlDiagramTemplateData,
   type UmlDiagramTemplatePreset,
-} from "./templates/umlDiagram";
+} from "./templates";
 
 import type { CollabAPI } from "./collab/Collab";
 import type { GoogleDriveFile } from "./workspace/data/googleDrive";
@@ -239,96 +238,6 @@ type SaveIndicatorStatus =
   | "saved"
   | "error"
   | "conflict";
-
-const areUmlClassTemplateDataEqual = (
-  left: UmlClassTemplateData | null,
-  right: UmlClassTemplateData | null,
-) => {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return false;
-  }
-
-  const serializeMembers = (items: UmlClassTemplateData["attributes"]) =>
-    items.map((item) => item.text).join("\n");
-
-  return (
-    left.name === right.name &&
-    (left.stereotype || "") === (right.stereotype || "") &&
-    serializeMembers(left.attributes) === serializeMembers(right.attributes) &&
-    serializeMembers(left.methods) === serializeMembers(right.methods)
-  );
-};
-
-const areUmlDiagramTemplateDataEqual = (
-  left: UmlDiagramTemplateData | null,
-  right: UmlDiagramTemplateData | null,
-) => {
-  if (left === right) {
-    return true;
-  }
-
-  if (!left || !right) {
-    return false;
-  }
-
-  return (
-    left.preset === right.preset &&
-    left.label === right.label &&
-    (left.body || "") === (right.body || "")
-  );
-};
-
-const getSelectedElementIdsSignature = (
-  selectedElementIds: AppState["selectedElementIds"] | null | undefined,
-) =>
-  Object.keys(selectedElementIds || {})
-    .filter((elementId) => selectedElementIds?.[elementId])
-    .sort()
-    .join("|");
-
-const serializeUmlClassTemplateData = (data: UmlClassTemplateData | null) => {
-  if (!data) {
-    return "";
-  }
-
-  return [
-    data.name,
-    data.stereotype || "",
-    data.attributes.map((item) => item.text).join("\n"),
-    data.methods.map((item) => item.text).join("\n"),
-  ].join("::");
-};
-
-const serializeUmlDiagramTemplateData = (
-  data: UmlDiagramTemplateData | null,
-) => {
-  if (!data) {
-    return "";
-  }
-
-  return [data.preset, data.label, data.body || ""].join("::");
-};
-
-const buildUmlSelectionSignature = (
-  selectedIdsSignature: string,
-  rootId: string | null,
-  dataSignature: string,
-) => [selectedIdsSignature, rootId || "", dataSignature].join("##");
-
-const pruneSignatureCache = (
-  cache: Map<string, string>,
-  elementsById: ReadonlyMap<string, ExcalidrawElement>,
-) => {
-  for (const rootId of cache.keys()) {
-    if (!elementsById.has(rootId)) {
-      cache.delete(rootId);
-    }
-  }
-};
 
 polyfill();
 
@@ -460,138 +369,6 @@ if (window.self !== window.top) {
     // ignore
   }
 }
-
-const getMathFormulaElementData = (
-  element: NonDeletedExcalidrawElement | null,
-): {
-  source: string;
-  style: MathFormulaStyle;
-  intrinsicWidth?: number;
-  intrinsicHeight?: number;
-} | null => {
-  if (!element) {
-    return null;
-  }
-
-  const customData = element.customData as
-    | {
-        formulaType?: string;
-        formulaSource?: string;
-        formulaStyle?: Partial<MathFormulaStyle> | null;
-        intrinsicWidth?: number;
-        intrinsicHeight?: number;
-      }
-    | undefined;
-
-  if (
-    customData?.formulaType !== "math" ||
-    typeof customData.formulaSource !== "string"
-  ) {
-    return null;
-  }
-
-  return {
-    source: customData.formulaSource,
-    style: normalizeMathFormulaStyle(customData.formulaStyle),
-    intrinsicWidth:
-      typeof customData.intrinsicWidth === "number"
-        ? customData.intrinsicWidth
-        : undefined,
-    intrinsicHeight:
-      typeof customData.intrinsicHeight === "number"
-        ? customData.intrinsicHeight
-        : undefined,
-  };
-};
-
-const resolveMathFormulaColorFromSidebar = (
-  color: string | null | undefined,
-  editorTheme: "light" | "dark",
-) => {
-  const normalized = (color || "").trim().toLowerCase();
-  if (!normalized || normalized === "transparent") {
-    return editorTheme === THEME.DARK ? "#e8ecff" : "#1d1d3a";
-  }
-  return color!;
-};
-
-const resolveCodeBlockHighlightColorFromSidebar = (
-  color: string | null | undefined,
-): CodeBlockStyle["highlightColor"] => {
-  const normalized = (color || "").trim().toLowerCase();
-  if (!normalized || normalized === "transparent") {
-    return "yellow";
-  }
-  const hexMatch = normalized.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-  if (!hexMatch) {
-    return "yellow";
-  }
-  const hex = hexMatch[1];
-  const [r, g, b] =
-    hex.length === 3
-      ? hex.split("").map((value) => parseInt(value + value, 16))
-      : [
-          parseInt(hex.slice(0, 2), 16),
-          parseInt(hex.slice(2, 4), 16),
-          parseInt(hex.slice(4, 6), 16),
-        ];
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-
-  if (max - min < 18) {
-    return "yellow";
-  }
-  if (r >= g && r >= b) {
-    return "red";
-  }
-  if (g >= r && g >= b) {
-    return "green";
-  }
-  return "blue";
-};
-
-const getCodeBlockElementData = (
-  element: NonDeletedExcalidrawElement | null,
-): {
-  source: string;
-  style: CodeBlockStyle;
-  intrinsicWidth?: number;
-  intrinsicHeight?: number;
-} | null => {
-  if (!element) {
-    return null;
-  }
-
-  const customData = element.customData as
-    | {
-        codeBlockType?: string;
-        codeBlockSource?: string;
-        codeBlockStyle?: Partial<CodeBlockStyle> | null;
-        intrinsicWidth?: number;
-        intrinsicHeight?: number;
-      }
-    | undefined;
-
-  if (
-    customData?.codeBlockType !== "code" ||
-    typeof customData.codeBlockSource !== "string"
-  ) {
-    return null;
-  }
-
-  return {
-    source: customData.codeBlockSource,
-    style: normalizeCodeBlockStyle(customData.codeBlockStyle),
-    intrinsicWidth:
-      typeof customData.intrinsicWidth === "number"
-        ? customData.intrinsicWidth
-        : undefined,
-    intrinsicHeight:
-      typeof customData.intrinsicHeight === "number"
-        ? customData.intrinsicHeight
-        : undefined,
-  };
-};
 
 const stripCustomEmbeddableLinks = <T extends ExcalidrawElement>(
   elements: readonly T[],
@@ -877,24 +654,33 @@ const ExcalidrawWrapper = () => {
   } | null>(null);
   const currentAppStateRef = useRef<AppState | null>(null);
   const templateLibraryDialogOpenRef = useRef(false);
-  const selectedUmlClassRootIdRef = useRef<string | null>(null);
-  const selectedUmlClassDataRef = useRef<UmlClassTemplateData | null>(null);
-  const umlClassSelectionSignatureRef = useRef("");
-  const umlClassLayoutSignatureCacheRef = useRef<Map<string, string>>(
-    new Map(),
+  const codeBlockDialogOpenRef = useRef(false);
+  const mathFormulaDialogOpenRef = useRef(false);
+
+  const isEmbeddableDialogOpen = useCallback(
+    () => codeBlockDialogOpenRef.current || mathFormulaDialogOpenRef.current,
+    [],
   );
-  const selectedUmlDiagramRootIdRef = useRef<string | null>(null);
-  const selectedUmlDiagramDataRef = useRef<UmlDiagramTemplateData | null>(null);
-  const umlDiagramSelectionSignatureRef = useRef("");
-  const umlDiagramLayoutSignatureCacheRef = useRef<Map<string, string>>(
-    new Map(),
-  );
-  const umlTemplateRelayoutGuardRef = useRef<{
-    rootId: string | null;
-    until: number;
-  }>({
-    rootId: null,
-    until: 0,
+
+  useEffect(() => {
+    codeBlockDialogOpenRef.current = !!codeBlockDialogState;
+  }, [codeBlockDialogState]);
+
+  useEffect(() => {
+    mathFormulaDialogOpenRef.current = !!mathFormulaDialogState;
+  }, [mathFormulaDialogState]);
+
+  const { syncUmlTemplateScene } = useUmlTemplateSceneSync({
+    setSelectedUmlClassRootId,
+    setSelectedUmlClassData,
+    setSelectedUmlDiagramRootId,
+    setSelectedUmlDiagramData,
+  });
+
+  const { syncEmbeddableToolbarFromSidebar } = useEmbeddableToolbarSync({
+    excalidrawAPI,
+    editorTheme,
+    isEmbeddableDialogOpen,
   });
 
   const suppressDirtyMark = useCallback((durationMs = 800) => {
@@ -997,6 +783,7 @@ const ExcalidrawWrapper = () => {
       const appState =
         currentAppStateRef.current || excalidrawAPI.getAppState();
 
+      mathFormulaDialogOpenRef.current = true;
       setMathFormulaDialogState({
         mode: "insert",
         sceneX,
@@ -1023,6 +810,7 @@ const ExcalidrawWrapper = () => {
       const appState =
         currentAppStateRef.current || excalidrawAPI?.getAppState();
 
+      mathFormulaDialogOpenRef.current = true;
       setMathFormulaDialogState({
         mode: "edit",
         targetElementId: element.id,
@@ -1043,6 +831,7 @@ const ExcalidrawWrapper = () => {
   );
 
   const handleCloseMathFormulaDialog = useCallback(() => {
+    mathFormulaDialogOpenRef.current = false;
     const dialogState = mathFormulaDialogState;
     setMathFormulaDialogState(null);
 
@@ -1068,6 +857,8 @@ const ExcalidrawWrapper = () => {
       if (!normalizedFormula) {
         throw new Error(t("mathFormula.errors.empty"));
       }
+
+      mathFormulaDialogOpenRef.current = false;
       const appState =
         currentAppStateRef.current || excalidrawAPI.getAppState();
       const sidebarMathStyle = normalizeMathFormulaStyle({
@@ -1219,6 +1010,7 @@ const ExcalidrawWrapper = () => {
       const appState =
         currentAppStateRef.current || excalidrawAPI.getAppState();
 
+      codeBlockDialogOpenRef.current = true;
       setCodeBlockDialogState({
         mode: "insert",
         sceneX,
@@ -1245,6 +1037,7 @@ const ExcalidrawWrapper = () => {
       const appState =
         currentAppStateRef.current || excalidrawAPI?.getAppState();
 
+      codeBlockDialogOpenRef.current = true;
       setCodeBlockDialogState({
         mode: "edit",
         targetElementId: element.id,
@@ -1265,6 +1058,7 @@ const ExcalidrawWrapper = () => {
   );
 
   const handleCloseCodeBlockDialog = useCallback(() => {
+    codeBlockDialogOpenRef.current = false;
     const dialogState = codeBlockDialogState;
     setCodeBlockDialogState(null);
 
@@ -1291,6 +1085,7 @@ const ExcalidrawWrapper = () => {
         throw new Error(t("codeBlock.errors.empty"));
       }
 
+      codeBlockDialogOpenRef.current = false;
       const appState =
         currentAppStateRef.current || excalidrawAPI.getAppState();
       const sidebarCodeBlockStyle = normalizeCodeBlockStyle({
@@ -1612,6 +1407,11 @@ const ExcalidrawWrapper = () => {
     const openSidebarTab = excalidrawAPI.getAppState().openSidebar?.tab;
 
     if (selectedUmlClassRootId || selectedUmlDiagramRootId) {
+      // Avoid toggleSidebar({ force: true }) when already on this tab — it always
+      // calls setState in the editor and can flood onChange / freeze the page.
+      if (openSidebarName === "default" && openSidebarTab === "uml-template") {
+        return;
+      }
       void excalidrawAPI.toggleSidebar({
         name: "default",
         tab: "uml-template",
@@ -1938,328 +1738,10 @@ const ExcalidrawWrapper = () => {
     const elementsById = new Map<string, ExcalidrawElement>(
       elements.map((element) => [element.id, element]),
     );
-    const selectedElementIdsSignature = getSelectedElementIdsSignature(
-      appState.selectedElementIds,
-    );
-    const selectedElementIds = Object.keys(
-      appState.selectedElementIds || {},
-    ).filter((elementId) => appState.selectedElementIds?.[elementId]);
-    pruneSignatureCache(umlClassLayoutSignatureCacheRef.current, elementsById);
-    pruneSignatureCache(
-      umlDiagramLayoutSignatureCacheRef.current,
-      elementsById,
-    );
 
-    try {
-      if (selectedElementIds.length === 1 && excalidrawAPI) {
-        const selectedElement = elementsById.get(selectedElementIds[0]);
+    syncEmbeddableToolbarFromSidebar(elements, appState, elementsById);
 
-        if (selectedElement && isEmbeddableElement(selectedElement)) {
-          const codeBlockData = getCodeBlockElementData(
-            selectedElement as NonDeletedExcalidrawElement,
-          );
-
-          if (codeBlockData) {
-            const sidebarStyle = normalizeCodeBlockStyle({
-              ...codeBlockData.style,
-              fontSize: appState.currentItemFontSize,
-            });
-
-            const didSidebarStyleChange =
-              sidebarStyle.fontSize !== codeBlockData.style.fontSize ||
-              sidebarStyle.highlightStyle !==
-                codeBlockData.style.highlightStyle ||
-              sidebarStyle.highlightCustomBorderColor !==
-                codeBlockData.style.highlightCustomBorderColor ||
-              sidebarStyle.highlightCustomBackground !==
-                codeBlockData.style.highlightCustomBackground ||
-              sidebarStyle.highlightBorderWidth !==
-                codeBlockData.style.highlightBorderWidth ||
-              sidebarStyle.highlightBorderRadius !==
-                codeBlockData.style.highlightBorderRadius;
-
-            if (didSidebarStyleChange) {
-              const {
-                width: nextIntrinsicWidth,
-                height: nextIntrinsicHeight,
-                style: normalizedStyle,
-              } = measureCodeBlockDimensions(
-                codeBlockData.source,
-                sidebarStyle,
-              );
-              const currentCustomData = (selectedElement.customData ||
-                {}) as Record<string, unknown>;
-              const prevIntrinsicWidth =
-                typeof currentCustomData.intrinsicWidth === "number"
-                  ? Math.max(currentCustomData.intrinsicWidth, 1)
-                  : Math.max(selectedElement.width, 1);
-              const prevIntrinsicHeight =
-                typeof currentCustomData.intrinsicHeight === "number"
-                  ? Math.max(currentCustomData.intrinsicHeight, 1)
-                  : Math.max(selectedElement.height, 1);
-              const widthScale = selectedElement.width / prevIntrinsicWidth;
-              const heightScale = selectedElement.height / prevIntrinsicHeight;
-              const nextWidth = Math.max(
-                1,
-                Math.round(
-                  nextIntrinsicWidth *
-                    (Number.isFinite(widthScale) ? widthScale : 1),
-                ),
-              );
-              const nextHeight = Math.max(
-                1,
-                Math.round(
-                  nextIntrinsicHeight *
-                    (Number.isFinite(heightScale) ? heightScale : 1),
-                ),
-              );
-              const updatedElement = newElementWith(selectedElement, {
-                width: nextWidth,
-                height: nextHeight,
-                link: null,
-                customData: {
-                  ...currentCustomData,
-                  codeBlockStyle: normalizedStyle,
-                  intrinsicWidth: nextIntrinsicWidth,
-                  intrinsicHeight: nextIntrinsicHeight,
-                },
-              });
-
-              excalidrawAPI.updateScene({
-                elements: elements.map((element) =>
-                  element.id === selectedElement.id ? updatedElement : element,
-                ),
-                appState: {
-                  selectedElementIds: {
-                    [selectedElement.id]: true,
-                  },
-                },
-                captureUpdate: CaptureUpdateAction.IMMEDIATELY,
-              });
-              return;
-            }
-          }
-        }
-      }
-
-      const selectedUmlRoot = resolveSelectedUmlClassTemplateRootWithMap(
-        elementsById,
-        appState.selectedElementIds,
-      );
-      if (selectedUmlRoot && excalidrawAPI) {
-        const guard = umlTemplateRelayoutGuardRef.current;
-        const shouldSkipRelayout =
-          guard.rootId === selectedUmlRoot.id && Date.now() < guard.until;
-        const nextLayoutSignature = getUmlClassTemplateLayoutSignature(
-          selectedUmlRoot,
-          elementsById,
-        );
-        const cachedLayoutSignature =
-          umlClassLayoutSignatureCacheRef.current.get(selectedUmlRoot.id);
-        const shouldCheckRelayout =
-          nextLayoutSignature === null ||
-          nextLayoutSignature !== cachedLayoutSignature;
-
-        if (!shouldSkipRelayout && shouldCheckRelayout) {
-          const relayoutElements = syncUmlClassTemplateLayoutInSceneWithMap(
-            elements,
-            selectedUmlRoot.id,
-            elementsById,
-          );
-
-          if (relayoutElements !== elements) {
-            const relayoutElementsById = new Map<string, ExcalidrawElement>(
-              relayoutElements.map((element) => [element.id, element]),
-            );
-            const relayoutRoot = relayoutElementsById.get(selectedUmlRoot.id);
-            const relayoutSignature = getUmlClassTemplateLayoutSignature(
-              relayoutRoot,
-              relayoutElementsById,
-            );
-            if (relayoutSignature) {
-              umlClassLayoutSignatureCacheRef.current.set(
-                selectedUmlRoot.id,
-                relayoutSignature,
-              );
-            }
-            umlTemplateRelayoutGuardRef.current = {
-              rootId: selectedUmlRoot.id,
-              until: Date.now() + 200,
-            };
-            excalidrawAPI.updateScene({
-              elements: relayoutElements,
-              captureUpdate: CaptureUpdateAction.NEVER,
-            });
-            return;
-          }
-        }
-
-        if (nextLayoutSignature) {
-          umlClassLayoutSignatureCacheRef.current.set(
-            selectedUmlRoot.id,
-            nextLayoutSignature,
-          );
-        }
-      }
-
-      const nextSelectedUmlData = getUmlClassTemplateData(selectedUmlRoot);
-      const nextSelectedUmlRootId = selectedUmlRoot?.id || null;
-      const nextUmlClassSelectionSignature = buildUmlSelectionSignature(
-        selectedElementIdsSignature,
-        nextSelectedUmlRootId,
-        serializeUmlClassTemplateData(nextSelectedUmlData),
-      );
-
-      if (
-        umlClassSelectionSignatureRef.current !== nextUmlClassSelectionSignature
-      ) {
-        umlClassSelectionSignatureRef.current = nextUmlClassSelectionSignature;
-
-        if (selectedUmlClassRootIdRef.current !== nextSelectedUmlRootId) {
-          selectedUmlClassRootIdRef.current = nextSelectedUmlRootId;
-          setSelectedUmlClassRootId(nextSelectedUmlRootId);
-        }
-
-        if (
-          !areUmlClassTemplateDataEqual(
-            selectedUmlClassDataRef.current,
-            nextSelectedUmlData,
-          )
-        ) {
-          selectedUmlClassDataRef.current = nextSelectedUmlData;
-          setSelectedUmlClassData(nextSelectedUmlData);
-        }
-      }
-
-      const selectedUmlDiagramRoot =
-        resolveSelectedUmlDiagramTemplateRootWithMap(
-          elementsById,
-          appState.selectedElementIds,
-        );
-      if (selectedUmlDiagramRoot && excalidrawAPI) {
-        const guard = umlTemplateRelayoutGuardRef.current;
-        const shouldSkipRelayout =
-          guard.rootId === selectedUmlDiagramRoot.id &&
-          Date.now() < guard.until;
-        const nextLayoutSignature = getUmlDiagramTemplateLayoutSignature(
-          selectedUmlDiagramRoot,
-          elementsById,
-        );
-        const cachedLayoutSignature =
-          umlDiagramLayoutSignatureCacheRef.current.get(
-            selectedUmlDiagramRoot.id,
-          );
-        const shouldCheckRelayout =
-          nextLayoutSignature === null ||
-          nextLayoutSignature !== cachedLayoutSignature;
-
-        if (!shouldSkipRelayout && shouldCheckRelayout) {
-          const relayoutDiagramElements =
-            syncUmlDiagramTemplateLayoutInSceneWithMap(
-              elements,
-              selectedUmlDiagramRoot.id,
-              elementsById,
-            );
-
-          if (relayoutDiagramElements !== elements) {
-            const relayoutElementsById = new Map<string, ExcalidrawElement>(
-              relayoutDiagramElements.map((element) => [element.id, element]),
-            );
-            const relayoutRoot = relayoutElementsById.get(
-              selectedUmlDiagramRoot.id,
-            );
-            const relayoutSignature = getUmlDiagramTemplateLayoutSignature(
-              relayoutRoot,
-              relayoutElementsById,
-            );
-            if (relayoutSignature) {
-              umlDiagramLayoutSignatureCacheRef.current.set(
-                selectedUmlDiagramRoot.id,
-                relayoutSignature,
-              );
-            }
-            umlTemplateRelayoutGuardRef.current = {
-              rootId: selectedUmlDiagramRoot.id,
-              until: Date.now() + 200,
-            };
-            excalidrawAPI.updateScene({
-              elements: relayoutDiagramElements,
-              captureUpdate: CaptureUpdateAction.NEVER,
-            });
-            return;
-          }
-        }
-
-        if (nextLayoutSignature) {
-          umlDiagramLayoutSignatureCacheRef.current.set(
-            selectedUmlDiagramRoot.id,
-            nextLayoutSignature,
-          );
-        }
-      }
-
-      const nextSelectedUmlDiagramData = getUmlDiagramTemplateData(
-        selectedUmlDiagramRoot,
-      );
-      const editableUmlDiagramData =
-        nextSelectedUmlDiagramData &&
-        isEditableUmlDiagramTemplatePreset(nextSelectedUmlDiagramData.preset)
-          ? nextSelectedUmlDiagramData
-          : null;
-      const nextSelectedUmlDiagramRootId = editableUmlDiagramData
-        ? selectedUmlDiagramRoot?.id || null
-        : null;
-      const nextUmlDiagramSelectionSignature = buildUmlSelectionSignature(
-        selectedElementIdsSignature,
-        nextSelectedUmlDiagramRootId,
-        serializeUmlDiagramTemplateData(editableUmlDiagramData),
-      );
-
-      if (
-        umlDiagramSelectionSignatureRef.current !==
-        nextUmlDiagramSelectionSignature
-      ) {
-        umlDiagramSelectionSignatureRef.current =
-          nextUmlDiagramSelectionSignature;
-
-        if (
-          selectedUmlDiagramRootIdRef.current !== nextSelectedUmlDiagramRootId
-        ) {
-          selectedUmlDiagramRootIdRef.current = nextSelectedUmlDiagramRootId;
-          setSelectedUmlDiagramRootId(nextSelectedUmlDiagramRootId);
-        }
-
-        if (
-          !areUmlDiagramTemplateDataEqual(
-            selectedUmlDiagramDataRef.current,
-            editableUmlDiagramData,
-          )
-        ) {
-          selectedUmlDiagramDataRef.current = editableUmlDiagramData;
-          setSelectedUmlDiagramData(editableUmlDiagramData);
-        }
-      }
-    } catch (error) {
-      console.error("Failed to sync UML template sidebar state", error);
-      umlClassSelectionSignatureRef.current = "";
-      umlDiagramSelectionSignatureRef.current = "";
-      if (selectedUmlClassRootIdRef.current !== null) {
-        selectedUmlClassRootIdRef.current = null;
-        setSelectedUmlClassRootId(null);
-      }
-      if (selectedUmlClassDataRef.current !== null) {
-        selectedUmlClassDataRef.current = null;
-        setSelectedUmlClassData(null);
-      }
-      if (selectedUmlDiagramRootIdRef.current !== null) {
-        selectedUmlDiagramRootIdRef.current = null;
-        setSelectedUmlDiagramRootId(null);
-      }
-      if (selectedUmlDiagramDataRef.current !== null) {
-        selectedUmlDiagramDataRef.current = null;
-        setSelectedUmlDiagramData(null);
-      }
-    }
+    syncUmlTemplateScene(elements, appState, elementsById);
 
     if (Date.now() > suppressDirtyMarkUntilRef.current) {
       markSaveIndicatorDirty();

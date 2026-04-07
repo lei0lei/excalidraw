@@ -10,8 +10,10 @@ import { UmlDiagramSidebar } from "./UmlDiagramSidebar";
 
 import "./AppSidebar.scss";
 
-import type { UmlClassTemplateData } from "../templates/umlClass";
-import type { UmlDiagramTemplateData } from "../templates/umlDiagram";
+import type {
+  UmlClassTemplateData,
+  UmlDiagramTemplateData,
+} from "../templates";
 
 const UML_TAB_ID = "uml-template";
 const UmlTemplateIcon = (

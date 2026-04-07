@@ -6,6 +6,8 @@ Excalidraw is a **monorepo** with a clear separation between the core library an
 
 - **`packages/excalidraw/`** - Main React component library published to npm as `@excalidraw/excalidraw`
 - **`excalidraw-app/`** - Full-featured web application (excalidraw.com) that uses the library
+- **`excalidraw-app/templates/`** - Insertable scene templates by domain (`templates/uml/`, shared helpers in `templates/shared/`, barrel `templates/index.ts`)
+- **`excalidraw-app/hooks/`** - App-only hooks (e.g. `useUmlTemplateSceneSync` for template sidebar + layout relayout)
 - **`packages/`** - Core packages: `@excalidraw/common`, `@excalidraw/element`, `@excalidraw/math`, `@excalidraw/utils`
 - **`examples/`** - Integration examples (NextJS, browser script)
 
