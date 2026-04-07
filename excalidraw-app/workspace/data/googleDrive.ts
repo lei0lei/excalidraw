@@ -702,7 +702,16 @@ export const pickGoogleDriveRootFolder =
 
     return new Promise<GoogleDriveRootFolder | null>((resolve) => {
       const { picker } = window.google;
-      const docsView = new picker.DocsView(picker.ViewId.FOLDERS)
+      // ViewId.FOLDERS without a parent lists every folder in Drive in one flat
+      // list. Starting at My Drive root restores normal drill-down hierarchy.
+      const myDriveFolders = new picker.DocsView(picker.ViewId.FOLDERS)
+        .setParent("root")
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true);
+
+      // setParent and setEnableDrives cannot be combined on the same DocsView.
+      const sharedDriveFolders = new picker.DocsView(picker.ViewId.FOLDERS)
+        .setEnableDrives(true)
         .setIncludeFolders(true)
         .setSelectFolderEnabled(true);
 
@@ -710,7 +719,8 @@ export const pickGoogleDriveRootFolder =
         .setDeveloperKey(apiKey)
         .setOAuthToken(token)
         .setTitle("Select a Google Drive folder")
-        .addView(docsView)
+        .addView(myDriveFolders)
+        .addView(sharedDriveFolders)
         .setCallback(
           (data: { action?: string; docs?: Array<Record<string, string>> }) => {
             if (data.action === picker.Action.PICKED && data.docs?.[0]) {
