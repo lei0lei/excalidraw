@@ -30,7 +30,6 @@ import {
   ImageIcon,
   frameToolIcon,
   EmbedIcon,
-  codeIcon,
   laserPointerToolIcon,
   LassoIcon,
   mermaidLogoIcon,
@@ -41,30 +40,6 @@ import "./ToolIcon.scss";
 import "./MobileToolBar.scss";
 
 import type { AppClassProperties, ToolType, UIAppState } from "../types";
-
-const templateLibraryToolIcon = (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M5.25 5.25h13.5v13.5H5.25zM8.75 5.25v13.5M8.75 10.5h10M8.75 15.25h10"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-const mathFormulaToolIcon = (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M5 7l4 5-4 5M12 7h7M12 12h7M12 17h7"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 
 const SHAPE_TOOLS = [
   {
@@ -147,8 +122,16 @@ export const MobileToolBar = ({
   const frameToolSelected = activeTool.type === "frame";
   const laserToolSelected = activeTool.type === "laser";
   const embeddableToolSelected = activeTool.type === "embeddable";
-  const mathFormulaToolSelected =
-    activeTool.type === "custom" && activeTool.customType === "math-formula";
+  const customToolbarExtras = app.props.customToolbarExtraItems ?? [];
+  const mobileCustomToolbarExtras = customToolbarExtras.filter(
+    (item) => item.showInMobileToolbar !== false,
+  );
+  const activeCustomToolbarItem =
+    activeTool.type === "custom"
+      ? customToolbarExtras.find(
+          (item) => item.customType === activeTool.customType,
+        )
+      : undefined;
 
   const { TTDDialogTriggerTunnel } = useTunnels();
 
@@ -186,7 +169,7 @@ export const MobileToolBar = ({
     "text",
     "frame",
     "embeddable",
-    "math-formula",
+    ...mobileCustomToolbarExtras.map((item) => item.customType),
     "laser",
     "magicframe",
   ].filter((tool) => {
@@ -202,7 +185,7 @@ export const MobileToolBar = ({
     return true;
   });
   const extraToolSelected =
-    extraTools.includes(activeTool.type) || mathFormulaToolSelected;
+    extraTools.includes(activeTool.type) || !!activeCustomToolbarItem;
   const extraIcon = extraToolSelected
     ? activeTool.type === "text"
       ? TextIcon
@@ -212,8 +195,8 @@ export const MobileToolBar = ({
       ? frameToolIcon
       : activeTool.type === "embeddable"
       ? EmbedIcon
-      : mathFormulaToolSelected
-      ? mathFormulaToolIcon
+      : activeCustomToolbarItem
+      ? activeCustomToolbarItem.icon
       : activeTool.type === "laser"
       ? laserPointerToolIcon
       : activeTool.type === "magicframe"
@@ -477,46 +460,26 @@ export const MobileToolBar = ({
           >
             {t("toolBar.embeddable")}
           </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() =>
-              app.setActiveTool({ type: "custom", customType: "math-formula" })
-            }
-            icon={mathFormulaToolIcon}
-            data-testid="toolbar-math-formula"
-            selected={mathFormulaToolSelected}
-            shortcut="Shift+M"
-          >
-            {t("toolBar.mathFormula")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() =>
-              app.setActiveTool({ type: "custom", customType: "code-block" })
-            }
-            icon={codeIcon}
-            data-testid="toolbar-code-block"
-            selected={
-              app.state.activeTool.type === "custom" &&
-              app.state.activeTool.customType === "code-block"
-            }
-          >
-            {t("toolBar.codeBlock")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() =>
-              app.setActiveTool({
-                type: "custom",
-                customType: "template-library",
-              })
-            }
-            icon={templateLibraryToolIcon}
-            data-testid="toolbar-template-library"
-            selected={
-              app.state.activeTool.type === "custom" &&
-              app.state.activeTool.customType === "template-library"
-            }
-          >
-            {t("toolBar.templateLibrary")}
-          </DropdownMenu.Item>
+          {mobileCustomToolbarExtras.map((item) => (
+            <DropdownMenu.Item
+              key={item.customType}
+              onSelect={() =>
+                app.setActiveTool({
+                  type: "custom",
+                  customType: item.customType,
+                })
+              }
+              icon={item.icon}
+              data-testid={item.testId}
+              selected={
+                app.state.activeTool.type === "custom" &&
+                app.state.activeTool.customType === item.customType
+              }
+              shortcut={item.shortcut}
+            >
+              {t(item.titleI18nKey as any)}
+            </DropdownMenu.Item>
+          ))}
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}
             icon={laserPointerToolIcon}

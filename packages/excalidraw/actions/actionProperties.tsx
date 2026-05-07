@@ -152,6 +152,13 @@ import { getShortcutKey } from "../shortcut";
 
 import { register } from "./register";
 
+import {
+  getCodeBlockFontSize,
+  getCodeBlockStyle,
+  getMathFormulaFontSize,
+  getMathFormulaStyle,
+} from "../customEmbeddables";
+
 import type { AppClassProperties, AppState, Primitive } from "../types";
 
 const FONT_SIZE_RELATIVE_INCREASE_STEP = 0.1;
@@ -163,103 +170,6 @@ const getStylesPanelInfo = (app: AppClassProperties) => {
     isCompact: stylesPanelMode !== "full",
     isMobile: stylesPanelMode === "mobile",
   } as const;
-};
-
-const getMathFormulaFontSize = (element: ExcalidrawElement) => {
-  if (!isEmbeddableElement(element)) {
-    return null;
-  }
-
-  const customData = element.customData as
-    | {
-        formulaType?: string;
-        formulaStyle?: {
-          fontSize?: number;
-        };
-      }
-    | undefined;
-
-  if (customData?.formulaType !== "math") {
-    return null;
-  }
-
-  const fontSize = customData.formulaStyle?.fontSize;
-  return typeof fontSize === "number" && Number.isFinite(fontSize)
-    ? fontSize
-    : null;
-};
-
-const getMathFormulaStyle = (element: ExcalidrawElement) => {
-  if (!isEmbeddableElement(element)) {
-    return null;
-  }
-
-  const customData = element.customData as
-    | {
-        formulaType?: string;
-        formulaStyle?: {
-          fontSize?: number;
-          color?: string;
-        };
-      }
-    | undefined;
-
-  if (customData?.formulaType !== "math") {
-    return null;
-  }
-
-  return customData.formulaStyle || {};
-};
-
-const getCodeBlockFontSize = (element: ExcalidrawElement) => {
-  if (!isEmbeddableElement(element)) {
-    return null;
-  }
-
-  const customData = element.customData as
-    | {
-        codeBlockType?: string;
-        codeBlockStyle?: {
-          fontSize?: number;
-        };
-      }
-    | undefined;
-
-  if (customData?.codeBlockType !== "code") {
-    return null;
-  }
-
-  const fontSize = customData.codeBlockStyle?.fontSize;
-  return typeof fontSize === "number" && Number.isFinite(fontSize)
-    ? fontSize
-    : null;
-};
-
-const getCodeBlockStyle = (element: ExcalidrawElement) => {
-  if (!isEmbeddableElement(element)) {
-    return null;
-  }
-
-  const customData = element.customData as
-    | {
-        codeBlockType?: string;
-        codeBlockStyle?: {
-          fontSize?: number;
-          highlightStyle?: string;
-          highlightSpec?: string;
-          highlightCustomBorderColor?: string;
-          highlightCustomBackground?: string;
-          highlightBorderWidth?: number;
-          highlightBorderRadius?: number;
-        };
-      }
-    | undefined;
-
-  if (customData?.codeBlockType !== "code") {
-    return null;
-  }
-
-  return customData.codeBlockStyle || {};
 };
 
 const CODE_BLOCK_HIGHLIGHT_STYLE_OPTIONS = [

@@ -52,6 +52,11 @@ import { useTextEditorFocus } from "../hooks/useTextEditorFocus";
 
 import { actionToggleViewMode } from "../actions/actionToggleViewMode";
 
+import {
+  isCodeBlockEmbeddable,
+  isMathFormulaEmbeddable,
+} from "../customEmbeddables";
+
 import { getToolbarTools } from "./shapes";
 
 import "./Actions.scss";
@@ -68,7 +73,6 @@ import { Tooltip } from "./Tooltip";
 import DropdownMenu from "./dropdownMenu/DropdownMenu";
 import { PropertiesPopover } from "./PropertiesPopover";
 import {
-  codeIcon,
   EmbedIcon,
   extraToolsIcon,
   frameToolIcon,
@@ -103,31 +107,6 @@ const PROPERTIES_CLASSES = clsx([
   "properties-content",
 ]);
 
-const mathFormulaToolIcon = (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M5 7l4 5-4 5M12 7h7M12 12h7M12 17h7"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-const codeBlockToolIcon = codeIcon;
-const templateLibraryToolIcon = (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M5.25 5.25h13.5v13.5H5.25zM8.75 5.25v13.5M8.75 10.5h10M8.75 15.25h10"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 export const canChangeStrokeColor = (
   appState: UIAppState,
   targetElements: ExcalidrawElement[],
@@ -159,37 +138,6 @@ export const canChangeBackgroundColor = (
     hasBackground(appState.activeTool.type) ||
     targetElements.some((element) => hasBackground(element.type))
   );
-};
-
-const isMathFormulaEmbeddable = (element: ExcalidrawElement) => {
-  if (!isEmbeddableElement(element)) {
-    return false;
-  }
-
-  const customData = element.customData as
-    | {
-        formulaType?: string;
-      }
-    | undefined;
-
-  return (
-    element.link?.startsWith("math://formula/") === true ||
-    customData?.formulaType === "math"
-  );
-};
-
-const isCodeBlockEmbeddable = (element: ExcalidrawElement) => {
-  if (!isEmbeddableElement(element)) {
-    return false;
-  }
-
-  const customData = element.customData as
-    | {
-        codeBlockType?: string;
-      }
-    | undefined;
-
-  return customData?.codeBlockType === "code";
 };
 
 export const SelectedShapeActions = ({
@@ -1201,13 +1149,13 @@ export const ShapesSwitcher = ({
     app.state.preferredSelectionTool.type !== "lasso";
 
   const embeddableToolSelected = activeTool.type === "embeddable";
-  const mathFormulaToolSelected =
-    activeTool.type === "custom" && activeTool.customType === "math-formula";
-  const codeBlockToolSelected =
-    activeTool.type === "custom" && activeTool.customType === "code-block";
-  const templateLibraryToolSelected =
-    activeTool.type === "custom" &&
-    activeTool.customType === "template-library";
+  const customToolbarExtras = app.props.customToolbarExtraItems ?? [];
+  const activeCustomToolbarItem =
+    activeTool.type === "custom"
+      ? customToolbarExtras.find(
+          (item) => item.customType === activeTool.customType,
+        )
+      : undefined;
 
   const { TTDDialogTriggerTunnel } = useTunnels();
 
@@ -1321,7 +1269,7 @@ export const ShapesSwitcher = ({
             "App-toolbar__extra-tools-trigger--selected":
               frameToolSelected ||
               embeddableToolSelected ||
-              mathFormulaToolSelected ||
+              !!activeCustomToolbarItem ||
               lassoToolSelected ||
               // in collab we're already highlighting the laser button
               // outside toolbar, so let's not highlight extra-tools button
@@ -1338,12 +1286,8 @@ export const ShapesSwitcher = ({
             ? frameToolIcon
             : embeddableToolSelected
             ? EmbedIcon
-            : mathFormulaToolSelected
-            ? mathFormulaToolIcon
-            : codeBlockToolSelected
-            ? codeBlockToolIcon
-            : templateLibraryToolSelected
-            ? templateLibraryToolIcon
+            : activeCustomToolbarItem
+            ? activeCustomToolbarItem.icon
             : laserToolSelected && !app.props.isCollaborating
             ? laserPointerToolIcon
             : lassoToolSelected
@@ -1372,40 +1316,26 @@ export const ShapesSwitcher = ({
           >
             {t("toolBar.embeddable")}
           </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() =>
-              app.setActiveTool({ type: "custom", customType: "math-formula" })
-            }
-            icon={mathFormulaToolIcon}
-            data-testid="toolbar-math-formula"
-            selected={mathFormulaToolSelected}
-            shortcut="Shift+M"
-          >
-            {t("toolBar.mathFormula")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() =>
-              app.setActiveTool({ type: "custom", customType: "code-block" })
-            }
-            icon={codeBlockToolIcon}
-            data-testid="toolbar-code-block"
-            selected={codeBlockToolSelected}
-          >
-            {t("toolBar.codeBlock")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() =>
-              app.setActiveTool({
-                type: "custom",
-                customType: "template-library",
-              })
-            }
-            icon={templateLibraryToolIcon}
-            data-testid="toolbar-template-library"
-            selected={templateLibraryToolSelected}
-          >
-            {t("toolBar.templateLibrary")}
-          </DropdownMenu.Item>
+          {customToolbarExtras.map((item) => (
+            <DropdownMenu.Item
+              key={item.customType}
+              onSelect={() =>
+                app.setActiveTool({
+                  type: "custom",
+                  customType: item.customType,
+                })
+              }
+              icon={item.icon}
+              data-testid={item.testId}
+              selected={
+                activeTool.type === "custom" &&
+                activeTool.customType === item.customType
+              }
+              shortcut={item.shortcut}
+            >
+              {t(item.titleI18nKey as any)}
+            </DropdownMenu.Item>
+          ))}
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}
             icon={laserPointerToolIcon}

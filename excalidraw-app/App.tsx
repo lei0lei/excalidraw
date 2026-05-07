@@ -202,6 +202,7 @@ import {
   type UmlDiagramTemplateData,
   type UmlDiagramTemplatePreset,
 } from "./templates";
+import { EXCALIDRAW_APP_CUSTOM_TOOLBAR_ITEMS } from "./excalidrawCustomToolbar";
 
 import type { CollabAPI } from "./collab/Collab";
 import type { GoogleDriveFile } from "./workspace/data/googleDrive";
@@ -2814,6 +2815,7 @@ const ExcalidrawWrapper = () => {
       }}
     >
       <Excalidraw
+        customToolbarExtraItems={EXCALIDRAW_APP_CUSTOM_TOOLBAR_ITEMS}
         onChange={onChange}
         onPointerDown={(activeTool, pointerDownState) => {
           const hitElement = pointerDownState.hit.element;

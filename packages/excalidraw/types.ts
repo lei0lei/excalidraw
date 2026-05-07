@@ -556,6 +556,17 @@ export type OnExportProgress = {
   progress?: number;
 };
 
+export type ExcalidrawCustomToolbarExtraItem = {
+  customType: string;
+  /** Full i18n path passed to `t()`, e.g. `"toolBar.mathFormula"`. */
+  titleI18nKey: string;
+  icon: JSX.Element;
+  testId: string;
+  shortcut?: string;
+  /** When false, omitted from the mobile extra-tools menu. Default true. */
+  showInMobileToolbar?: boolean;
+};
+
 export interface ExcalidrawProps {
   onChange?: (
     elements: readonly OrderedExcalidrawElement[],
@@ -670,6 +681,11 @@ export interface ExcalidrawProps {
   aiEnabled?: boolean;
   showDeprecatedFonts?: boolean;
   renderScrollbars?: boolean;
+  /**
+   * Extra tools using `{ type: "custom", customType }`. When omitted, no items
+   * are shown (vanilla editor). Host apps register icons and i18n keys here.
+   */
+  customToolbarExtraItems?: readonly ExcalidrawCustomToolbarExtraItem[];
   /**
    * Called before exporting to a file.
    *

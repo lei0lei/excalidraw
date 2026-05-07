@@ -98,6 +98,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     aiEnabled,
     showDeprecatedFonts,
     renderScrollbars,
+    customToolbarExtraItems,
   } = props;
 
   const canvasActions = props.UIOptions?.canvasActions;
@@ -208,6 +209,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           aiEnabled={aiEnabled !== false}
           showDeprecatedFonts={showDeprecatedFonts}
           renderScrollbars={renderScrollbars}
+          customToolbarExtraItems={customToolbarExtraItems}
         >
           {children}
         </App>
@@ -298,6 +300,9 @@ export {
 } from "./data/restore";
 
 export { reconcileElements } from "./data/reconcile";
+
+export type { ExportEmbeddableTransform } from "./scene/exportEmbeddableTransforms";
+export { registerExportEmbeddableTransform } from "./scene/exportEmbeddableTransforms";
 
 export {
   exportToCanvas,
