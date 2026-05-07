@@ -21,6 +21,7 @@ import type {
 } from "@excalidraw/element/types";
 
 import { applyTemplateSceneUpdate } from "../shared/applyTemplateSceneUpdate";
+import { elementSharesAnyGroupId } from "../shared/templateInstanceGroups";
 
 export const UML_CLASS_TEMPLATE_TYPE = "uml-class";
 export type UmlClassTemplatePreset =
@@ -666,13 +667,15 @@ const resolveUmlClassChildElementIdsFromScene = (
       continue;
     }
     const role = cd.templateRole as ClassChildRole;
-    if (cd.templateRootId && rootRefs.has(cd.templateRootId)) {
+    // After paste, children keep the source templateRootId; scope by shared group.
+    if (
+      cd.templateRootId &&
+      rootRefs.has(cd.templateRootId) &&
+      (rootGroupIds.length === 0 || elementSharesAnyGroupId(el, rootGroupIds))
+    ) {
       withRootRef[role].push(id);
     }
-    if (
-      rootGroupIds.length > 0 &&
-      el.groupIds?.some((g) => rootGroupIds.includes(g))
-    ) {
+    if (rootGroupIds.length > 0 && elementSharesAnyGroupId(el, rootGroupIds)) {
       withGroup[role].push(id);
     }
   }
@@ -686,7 +689,11 @@ const resolveUmlClassChildElementIdsFromScene = (
       const el = elementsById.get(preferredId)!;
       if (!el.isDeleted) {
         const cd = getTemplateCustomData(el);
-        if (cd?.templateRole === role) {
+        if (
+          cd?.templateRole === role &&
+          (rootGroupIds.length === 0 ||
+            elementSharesAnyGroupId(el, rootGroupIds))
+        ) {
           return preferredId;
         }
       }
@@ -1016,7 +1023,15 @@ const resolveUmlClassTemplateRootIdFromSelection = (
   if (directRootId) {
     const root = findElementByIdFromMap(elementsById, directRootId);
     if (root && !root.isDeleted && isUmlClassTemplateRootElement(root)) {
-      return directRootId;
+      const elementGids = element.groupIds ?? [];
+      // After copy/paste, children still reference the source template's root id while
+      // belonging to a new group — only trust templateRootId when it matches this instance.
+      if (
+        elementGids.length === 0 ||
+        elementSharesAnyGroupId(element, root.groupIds)
+      ) {
+        return directRootId;
+      }
     }
   }
 

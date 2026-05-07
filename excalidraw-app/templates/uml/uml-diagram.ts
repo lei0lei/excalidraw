@@ -22,6 +22,7 @@ import type {
 } from "@excalidraw/element/types";
 
 import { applyTemplateSceneUpdate } from "../shared/applyTemplateSceneUpdate";
+import { elementSharesAnyGroupId } from "../shared/templateInstanceGroups";
 
 export const UML_DIAGRAM_TEMPLATE_TYPE = "uml-diagram";
 const UML_DIAGRAM_TEMPLATE_VERSION = 1;
@@ -556,22 +557,25 @@ const resolveUmlDiagramChildElementIdsFromScene = (
       continue;
     }
     const tr = cd.templateRootId;
+    const rootRefMatch =
+      !!(tr && rootRefs.has(tr)) &&
+      (rootGroupIds.length === 0 || elementSharesAnyGroupId(el, rootGroupIds));
     if (cd.templateRole === "label") {
-      if (tr && rootRefs.has(tr)) {
+      if (rootRefMatch) {
         labelsRootRef.push(id);
       }
       if (
         rootGroupIds.length > 0 &&
-        el.groupIds?.some((g) => rootGroupIds.includes(g))
+        elementSharesAnyGroupId(el, rootGroupIds)
       ) {
         labelsGroup.push(id);
       }
     } else if (preset === "note" && cd.templateRole === "body") {
-      if (tr && rootRefs.has(tr)) {
+      if (rootRefMatch) {
         bodiesRootRef.push(id);
       }
     } else if (cd.templateRole === "decoration") {
-      if (tr && rootRefs.has(tr)) {
+      if (rootRefMatch) {
         decorationPool.push(id);
       }
     }
@@ -583,7 +587,11 @@ const resolveUmlDiagramChildElementIdsFromScene = (
       const el = elementsById.get(stored.labelTextId)!;
       if (!el.isDeleted) {
         const cd = getTemplateCustomData(el);
-        if (cd?.templateRole === "label") {
+        if (
+          cd?.templateRole === "label" &&
+          (rootGroupIds.length === 0 ||
+            elementSharesAnyGroupId(el, rootGroupIds))
+        ) {
           return stored.labelTextId;
         }
       }
@@ -605,7 +613,11 @@ const resolveUmlDiagramChildElementIdsFromScene = (
       const el = elementsById.get(stored.bodyTextId)!;
       if (!el.isDeleted) {
         const cd = getTemplateCustomData(el);
-        if (cd?.templateRole === "body") {
+        if (
+          cd?.templateRole === "body" &&
+          (rootGroupIds.length === 0 ||
+            elementSharesAnyGroupId(el, rootGroupIds))
+        ) {
           return stored.bodyTextId;
         }
       }
@@ -626,7 +638,11 @@ const resolveUmlDiagramChildElementIdsFromScene = (
       const sid = stored[key];
       if (sid && elementsById.has(sid)) {
         const el = elementsById.get(sid)!;
-        if (!el.isDeleted) {
+        if (
+          !el.isDeleted &&
+          (rootGroupIds.length === 0 ||
+            elementSharesAnyGroupId(el, rootGroupIds))
+        ) {
           out[key] = sid;
           assigned.add(sid);
           continue;
@@ -1895,7 +1911,13 @@ const resolveUmlDiagramTemplateRootIdFromSelection = (
   if (directRootId) {
     const root = findElementByIdFromMap(elementsById, directRootId);
     if (root && !root.isDeleted && isUmlDiagramTemplateRootElement(root)) {
-      return directRootId;
+      const elementGids = element.groupIds ?? [];
+      if (
+        elementGids.length === 0 ||
+        elementSharesAnyGroupId(element, root.groupIds)
+      ) {
+        return directRootId;
+      }
     }
   }
 

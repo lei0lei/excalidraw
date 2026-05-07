@@ -125,26 +125,39 @@ export function useEmbeddableToolbarSync({
           string,
           unknown
         >;
-        const prevIntrinsicWidth =
+        const strokeW = Math.max(0, selectedElement.strokeWidth ?? 0);
+        const pad = 2 * strokeW;
+        const prevContentWidth =
           typeof currentCustomData.intrinsicWidth === "number"
             ? Math.max(currentCustomData.intrinsicWidth, 1)
-            : Math.max(selectedElement.width, 1);
-        const prevIntrinsicHeight =
+            : Math.max(selectedElement.width - pad, 1);
+        const prevContentHeight =
           typeof currentCustomData.intrinsicHeight === "number"
             ? Math.max(currentCustomData.intrinsicHeight, 1)
-            : Math.max(selectedElement.height, 1);
-        const widthScale = selectedElement.width / prevIntrinsicWidth;
-        const heightScale = selectedElement.height / prevIntrinsicHeight;
+            : Math.max(selectedElement.height - pad, 1);
+        const prevDefaultOuterW = prevContentWidth + pad;
+        const prevDefaultOuterH = prevContentHeight + pad;
+        const widthScale =
+          selectedElement.width /
+          (Number.isFinite(prevDefaultOuterW) && prevDefaultOuterW > 0
+            ? prevDefaultOuterW
+            : 1);
+        const heightScale =
+          selectedElement.height /
+          (Number.isFinite(prevDefaultOuterH) && prevDefaultOuterH > 0
+            ? prevDefaultOuterH
+            : 1);
         const nextWidth = Math.max(
           1,
           Math.round(
-            nextIntrinsicWidth * (Number.isFinite(widthScale) ? widthScale : 1),
+            (nextIntrinsicWidth + pad) *
+              (Number.isFinite(widthScale) ? widthScale : 1),
           ),
         );
         const nextHeight = Math.max(
           1,
           Math.round(
-            nextIntrinsicHeight *
+            (nextIntrinsicHeight + pad) *
               (Number.isFinite(heightScale) ? heightScale : 1),
           ),
         );

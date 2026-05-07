@@ -317,6 +317,8 @@
     "mathFormula": "数学公式",
     "codeBlock": "代码块",
     "templateLibrary": "模板库",
+    "templateInsertedUmlClass": "已插入 UML 类图模板（{{preset}}）",
+    "templateInsertedUmlDiagram": "已插入 UML 图示模板（{{preset}}）",
     "convertElementType": "切换形状种类"
   },
   "mathFormula": {
@@ -731,6 +733,7 @@
     "placeholder": "快速搜索"
   },
   "workspace": {
+    "openFromToolbar": "工作区 — 浏览并打开文件",
     "backToEditor": "返回编辑器",
     "storageBackend": "存储后端",
     "googleDrive": "Google Drive",
@@ -749,7 +752,22 @@
     "loadingFolderContent": "正在加载文件夹内容...",
     "emptyFolder": "当前文件夹下还没有子文件夹或 .excalidraw 文件。",
     "open": "打开",
-    "previewPending": "预览生成中"
+    "previewPending": "预览生成中",
+    "settingsMenu": "工作区设置",
+    "settingsExportLabel": "导出",
+    "settingsAutoSaveLabel": "自动保存",
+    "autoSaveUnit": "min",
+    "exportTreeZip": "导出文件夹为 ZIP",
+    "exporting": "正在导出…",
+    "exportSuccess": "已将工作区文件夹下载为 ZIP。",
+    "exportFailed": "导出失败。",
+    "exportNeedRoot": "请先选择工作区根文件夹。",
+    "exportNeedDrive": "请先连接 Google Drive 并选择文件夹后再导出。",
+    "exportLocalUnsupported": "当前浏览器不支持导出本地目录。",
+    "autoSaveInterval": "自动保存（编辑器）",
+    "autoSaveOff": "关闭",
+    "autoSaveMinutesValue": "{{minutes}} 分钟",
+    "autoSaveHint": "在编辑器中打开 Google Drive 或本地工作区文件时，每隔多少分钟自动保存一次。设为 0 表示关闭。协作模式下不会自动保存。"
   },
   "fontList": {
     "badge": {

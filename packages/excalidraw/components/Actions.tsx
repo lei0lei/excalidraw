@@ -10,7 +10,6 @@ import {
 } from "@excalidraw/common";
 
 import {
-  isEmbeddableElement,
   shouldAllowVerticalAlign,
   suppportsHorizontalAlign,
   hasBoundTextElement,

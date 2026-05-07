@@ -46,7 +46,6 @@ import {
 import {
   isArrowElement,
   isBoundToContainer,
-  isEmbeddableElement,
   isElbowArrow,
   isLinearElement,
   isLineElement,
@@ -150,14 +149,14 @@ import {
 
 import { getShortcutKey } from "../shortcut";
 
-import { register } from "./register";
-
 import {
   getCodeBlockFontSize,
   getCodeBlockStyle,
   getMathFormulaFontSize,
   getMathFormulaStyle,
 } from "../customEmbeddables";
+
+import { register } from "./register";
 
 import type { AppClassProperties, AppState, Primitive } from "../types";
 

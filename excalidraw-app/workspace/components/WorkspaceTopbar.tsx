@@ -1,8 +1,11 @@
 import { t } from "@excalidraw/excalidraw/i18n";
 
+import { WorkspaceSettingsMenu } from "./WorkspaceSettingsMenu";
+
 import type { BackendId, WorkspaceErrorState } from "../types";
 
 type WorkspaceTopbarProps = {
+  theme: "light" | "dark";
   selectedBackend: BackendId;
   onChangeBackend: (next: BackendId) => void;
   onBackToEditor: () => void;
@@ -15,9 +18,13 @@ type WorkspaceTopbarProps = {
   errorState: WorkspaceErrorState;
   onDismissError: () => void;
   onRetryError: () => void;
+  exportDisabled: boolean;
+  exportBusy: boolean;
+  onExportWorkspace: () => void | Promise<void>;
 };
 
 export const WorkspaceTopbar = ({
+  theme,
   selectedBackend,
   onChangeBackend,
   onBackToEditor,
@@ -30,6 +37,9 @@ export const WorkspaceTopbar = ({
   errorState,
   onDismissError,
   onRetryError,
+  exportDisabled,
+  exportBusy,
+  onExportWorkspace,
 }: WorkspaceTopbarProps) => {
   const statusTitle =
     selectedBackend === "google-drive"
@@ -94,6 +104,13 @@ export const WorkspaceTopbar = ({
         >
           📁
         </button>
+        <span className="workspace-topbar__spacer" aria-hidden />
+        <WorkspaceSettingsMenu
+          theme={theme}
+          exportDisabled={exportDisabled}
+          exportBusy={exportBusy}
+          onExport={onExportWorkspace}
+        />
       </header>
 
       {errorState ? (

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 
 import type {
   ExcalidrawEmbeddableElement,
@@ -70,45 +70,71 @@ export const CodeBlockEmbeddable = ({
     () => getCodeBlockHighlightOverlayStyle(measured.style, editorTheme),
     [editorTheme, measured.style],
   );
+  const strokePad = 2 * Math.max(0, element.strokeWidth ?? 0);
   const naturalWidth = Math.max(
-    measured.width || intrinsicWidth || element.width,
+    measured.width || intrinsicWidth || Math.max(1, element.width - strokePad),
     1,
   );
   const naturalHeight = Math.max(
-    measured.height || intrinsicHeight || element.height,
+    measured.height ||
+      intrinsicHeight ||
+      Math.max(1, element.height - strokePad),
     1,
   );
-  const width = Math.max(element.width, 1);
   const height = naturalHeight;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!onAutoResize) {
       return;
     }
 
+    let contentWidth = naturalWidth;
+    const root = rootRef.current;
+    const content = contentRef.current;
+    if (root && content) {
+      const available = root.clientWidth;
+      const needed = content.scrollWidth;
+      if (needed > available + 1) {
+        contentWidth = Math.max(
+          contentWidth,
+          naturalWidth + (needed - available) + 2,
+        );
+      }
+    }
+
+    const targetOuterW = contentWidth + strokePad;
+    const targetOuterH = naturalHeight + strokePad;
+
     if (
-      Math.abs(height - element.height) < 1 &&
-      Math.abs(naturalWidth - (intrinsicWidth || 0)) < 1 &&
-      Math.abs(naturalHeight - (intrinsicHeight || 0)) < 1
+      Math.abs(contentWidth - (intrinsicWidth || 0)) < 1 &&
+      Math.abs(naturalHeight - (intrinsicHeight || 0)) < 1 &&
+      Math.abs(element.width - targetOuterW) < 1 &&
+      Math.abs(element.height - targetOuterH) < 1
     ) {
       return;
     }
 
-    onAutoResize({ width: naturalWidth, height: naturalHeight });
+    onAutoResize({ width: contentWidth, height: naturalHeight });
   }, [
+    code,
     element.height,
     element.width,
+    element.strokeWidth,
     height,
+    highlighted.markup,
     intrinsicHeight,
     intrinsicWidth,
     naturalHeight,
     naturalWidth,
     onAutoResize,
-    width,
+    strokePad,
   ]);
 
   return (
     <div
+      ref={rootRef}
       className="CodeBlockEmbeddable"
       role="presentation"
       style={
@@ -128,13 +154,13 @@ export const CodeBlockEmbeddable = ({
       }
     >
       <div
+        ref={contentRef}
         className={`CodeBlockEmbeddable__content ${
           measured.style.lineNumbers
             ? "CodeBlockEmbeddable__content--numbers"
             : ""
         }`}
         style={{
-          width: `${width}px`,
           minHeight: `${height}px`,
           fontSize: `${measured.style.fontSize}px`,
           gridTemplateColumns: measured.style.lineNumbers

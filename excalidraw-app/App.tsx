@@ -177,6 +177,11 @@ import {
   normalizeExcalidrawFileName,
 } from "./workspace/data/saveManager";
 import {
+  getWorkspaceAutosaveMinutes,
+  WORKSPACE_AUTOSAVE_CHANGED_EVENT,
+} from "./workspace/workspaceAutosaveSettings";
+import {
+  getCodeBlockEmbeddableOuterDimensions,
   measureCodeBlockDimensions,
   normalizeCodeBlockStyle,
   type CodeBlockStyle,
@@ -195,6 +200,7 @@ import {
   getUmlDiagramTemplateData,
   getUmlDiagramTemplateRootId,
   isEditableUmlDiagramTemplatePreset,
+  remapUmlTemplatesOnDuplicate,
   updateUmlClassTemplateInScene,
   updateUmlDiagramTemplateInScene,
   type UmlClassTemplateData,
@@ -287,19 +293,14 @@ const WorkspaceEntryTrigger = ({
   onOpenWorkspace: () => void;
 }) => {
   const { MainMenuTunnel } = useTunnels();
-  const editorInterface = useEditorInterface();
-
-  if (editorInterface.formFactor === "phone") {
-    return null;
-  }
 
   return (
     <MainMenuTunnel.In>
       <button
         type="button"
         className="dropdown-menu-button main-menu-trigger workspace-canvas-trigger"
-        title="Open workspace"
-        aria-label="Open workspace"
+        title={t("workspace.openFromToolbar")}
+        aria-label={t("workspace.openFromToolbar")}
         onClick={onOpenWorkspace}
       >
         {WorkspaceExplorerIcon}
@@ -605,6 +606,18 @@ const ExcalidrawWrapper = () => {
     useState<SaveIndicatorStatus>("idle");
   const [saveIndicatorMessage, setSaveIndicatorMessage] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [workspaceAutosaveMinutes, setWorkspaceAutosaveMinutes] = useState(() =>
+    getWorkspaceAutosaveMinutes(),
+  );
+  const saveIndicatorStatusRef = useRef(saveIndicatorStatus);
+  saveIndicatorStatusRef.current = saveIndicatorStatus;
+  const primaryFileRef = useRef(primaryFile);
+  primaryFileRef.current = primaryFile;
+  const isSavingToCloudRef = useRef(isSavingToCloud);
+  isSavingToCloudRef.current = isSavingToCloud;
+  const handleSaveToCloudRef = useRef<
+    (opts?: { auto?: boolean }) => Promise<void>
+  >(async () => {});
   const [canInstallPWA, setCanInstallPWA] = useState(() => !!pwaEvent);
   const [showInstallPWA, setShowInstallPWA] = useState(() =>
     shouldShowPWAInstallButton(),
@@ -737,6 +750,22 @@ const ExcalidrawWrapper = () => {
     return isCollaborationLink(window.location.href);
   });
   const collabError = useAtomValue(collabErrorIndicatorAtom);
+
+  useEffect(() => {
+    const onAutosaveSettingChanged = () => {
+      setWorkspaceAutosaveMinutes(getWorkspaceAutosaveMinutes());
+    };
+    window.addEventListener(
+      WORKSPACE_AUTOSAVE_CHANGED_EVENT,
+      onAutosaveSettingChanged,
+    );
+    return () => {
+      window.removeEventListener(
+        WORKSPACE_AUTOSAVE_CHANGED_EVENT,
+        onAutosaveSettingChanged,
+      );
+    };
+  }, []);
 
   useHandleLibrary({
     excalidrawAPI,
@@ -1099,8 +1128,8 @@ const ExcalidrawWrapper = () => {
       });
 
       const {
-        width,
-        height,
+        width: contentWidth,
+        height: contentHeight,
         style: normalizedStyle,
       } = measureCodeBlockDimensions(normalizedCode, sidebarCodeBlockStyle);
 
@@ -1108,8 +1137,8 @@ const ExcalidrawWrapper = () => {
         codeBlockSource: normalizedCode,
         codeBlockType: "code",
         codeBlockStyle: normalizedStyle,
-        intrinsicWidth: width,
-        intrinsicHeight: height,
+        intrinsicWidth: contentWidth,
+        intrinsicHeight: contentHeight,
       };
 
       if (dialogState.mode === "edit" && dialogState.targetElementId) {
@@ -1122,9 +1151,16 @@ const ExcalidrawWrapper = () => {
           throw new Error(t("codeBlock.errors.originalNotFound"));
         }
 
+        const { width: outerWidth, height: outerHeight } =
+          getCodeBlockEmbeddableOuterDimensions(
+            contentWidth,
+            contentHeight,
+            targetElement.strokeWidth,
+          );
+
         const updatedElement = newElementWith(targetElement, {
-          width,
-          height,
+          width: outerWidth,
+          height: outerHeight,
           link: null,
           customData: codeBlockCustomData,
         });
@@ -1155,16 +1191,24 @@ const ExcalidrawWrapper = () => {
         throw new Error(t("codeBlock.errors.positionMissing"));
       }
 
+      const CODE_BLOCK_EMBED_STROKE = 1;
+      const { width: outerWidth, height: outerHeight } =
+        getCodeBlockEmbeddableOuterDimensions(
+          contentWidth,
+          contentHeight,
+          CODE_BLOCK_EMBED_STROKE,
+        );
+
       let embeddableElement = newEmbeddableElement({
         type: "embeddable",
-        x: dialogState.sceneX - width / 2,
-        y: dialogState.sceneY - height / 2,
-        width,
-        height,
+        x: dialogState.sceneX - outerWidth / 2,
+        y: dialogState.sceneY - outerHeight / 2,
+        width: outerWidth,
+        height: outerHeight,
         strokeColor: "transparent",
         backgroundColor: "transparent",
         fillStyle: "solid",
-        strokeWidth: 1,
+        strokeWidth: CODE_BLOCK_EMBED_STROKE,
         strokeStyle: "solid",
         roughness: 0,
         opacity: 100,
@@ -1303,7 +1347,7 @@ const ExcalidrawWrapper = () => {
       setIsTemplateLibraryDialogOpen(false);
       excalidrawAPI.setActiveTool({ type: "selection" });
       excalidrawAPI.setToast({
-        message: `Inserted UML ${preset}`,
+        message: t("toolBar.templateInsertedUmlClass", { preset }),
       });
     },
     [excalidrawAPI],
@@ -1343,7 +1387,7 @@ const ExcalidrawWrapper = () => {
       setIsTemplateLibraryDialogOpen(false);
       excalidrawAPI.setActiveTool({ type: "selection" });
       excalidrawAPI.setToast({
-        message: `Inserted UML ${preset}`,
+        message: t("toolBar.templateInsertedUmlDiagram", { preset }),
       });
     },
     [excalidrawAPI],
@@ -2266,158 +2310,230 @@ const ExcalidrawWrapper = () => {
     return nextPrimaryFile;
   }, [excalidrawAPI, markSaveIndicatorSaved, primaryFile, suppressDirtyMark]);
 
-  const handleSaveToCloud = useCallback(async () => {
-    if (!excalidrawAPI || isSavingToCloud) {
+  const handleSaveToCloud = useCallback(
+    async (opts?: { auto?: boolean }) => {
+      if (!excalidrawAPI || isSavingToCloud) {
+        return;
+      }
+
+      if (opts?.auto) {
+        const pf = primaryFile;
+        if (!pf || (pf.provider !== "gdrive" && pf.provider !== "local")) {
+          return;
+        }
+      }
+
+      setIsSavingToCloud(true);
+      setSaveIndicatorStatus("saving");
+      setSaveIndicatorMessage("");
+      try {
+        if (primaryFile?.provider === "gdrive") {
+          const conflictCheck = await detectSaveConflict(primaryFile);
+
+          if (conflictCheck.hasConflict) {
+            if (opts?.auto) {
+              setSaveIndicatorStatus((prev) =>
+                prev === "saving" ? "unsaved" : prev,
+              );
+              return;
+            }
+
+            const conflictMessage =
+              "Google Drive file changed since last open/save. Overwrite the remote version?";
+            markSaveIndicatorConflict(conflictMessage);
+
+            if (!window.confirm(conflictMessage)) {
+              return;
+            }
+          }
+
+          const normalizedName = normalizeExcalidrawFileName(primaryFile.name);
+          const blob = buildExcalidrawBlob({
+            elements: excalidrawAPI.getSceneElements(),
+            appState: excalidrawAPI.getAppState(),
+            files: excalidrawAPI.getFiles(),
+          });
+
+          const savedFile = await updateGoogleDriveFile({
+            fileId: primaryFile.fileId,
+            name: normalizedName,
+            blob,
+          });
+
+          const nextPrimaryFile: CloudFileRef = {
+            ...primaryFile,
+            name: savedFile.name,
+            mimeType: savedFile.mimeType,
+            folderId: savedFile.parents?.[0] || primaryFile.folderId,
+            modifiedTime: savedFile.modifiedTime,
+          };
+
+          setPrimaryFile(nextPrimaryFile);
+          suppressDirtyMark();
+          excalidrawAPI.updateScene({
+            appState: {
+              name: savedFile.name.replace(/\.excalidraw$/i, ""),
+            },
+            captureUpdate: CaptureUpdateAction.NEVER,
+          });
+          markSaveIndicatorSaved("Saved to Google Drive");
+          if (!opts?.auto) {
+            excalidrawAPI.setToast({
+              message: `Saved "${savedFile.name}" to Google Drive`,
+            });
+          }
+          return;
+        }
+
+        if (
+          primaryFile?.provider === "local" &&
+          primaryFile.fileHandle &&
+          primaryFile.directoryHandle
+        ) {
+          const conflictCheck = await detectSaveConflict(primaryFile);
+
+          if (conflictCheck.hasConflict) {
+            if (opts?.auto) {
+              setSaveIndicatorStatus((prev) =>
+                prev === "saving" ? "unsaved" : prev,
+              );
+              return;
+            }
+
+            const conflictMessage =
+              "Local file changed on disk since last open/save. Overwrite the local version?";
+            markSaveIndicatorConflict(conflictMessage);
+
+            if (!window.confirm(conflictMessage)) {
+              return;
+            }
+          }
+
+          const blob = buildExcalidrawBlob({
+            elements: excalidrawAPI.getSceneElements(),
+            appState: excalidrawAPI.getAppState(),
+            files: excalidrawAPI.getFiles(),
+          });
+
+          const savedFile = await updateLocalFile({
+            file: {
+              id: primaryFile.fileId,
+              name: primaryFile.name,
+              parentId: primaryFile.folderId,
+              path: primaryFile.path || primaryFile.fileId,
+              mimeType: primaryFile.mimeType,
+              modifiedTime: primaryFile.modifiedTime,
+              isExcalidrawFile: true,
+              fileHandle: primaryFile.fileHandle,
+              directoryHandle: primaryFile.directoryHandle,
+              parentDirectoryHandle: primaryFile.directoryHandle,
+            },
+            blob,
+          });
+
+          const nextPrimaryFile: CloudFileRef = {
+            ...primaryFile,
+            name: savedFile.name,
+            mimeType: savedFile.mimeType,
+            folderId: savedFile.parentId,
+            modifiedTime: savedFile.modifiedTime,
+            path: savedFile.path,
+            fileHandle: savedFile.fileHandle,
+            directoryHandle: savedFile.directoryHandle,
+          };
+
+          setPrimaryFile(nextPrimaryFile);
+          suppressDirtyMark();
+          excalidrawAPI.updateScene({
+            appState: {
+              name: savedFile.name.replace(/\.excalidraw$/i, ""),
+            },
+            captureUpdate: CaptureUpdateAction.NEVER,
+          });
+          markSaveIndicatorSaved("Saved to local directory");
+          if (!opts?.auto) {
+            excalidrawAPI.setToast({
+              message: `Saved "${savedFile.name}" to local directory`,
+            });
+          }
+          return;
+        }
+
+        if (opts?.auto) {
+          setSaveIndicatorStatus((prev) => (prev === "saving" ? "idle" : prev));
+          return;
+        }
+
+        const saveLocalFirst = window.confirm(
+          "Save to a local directory?\nPress Cancel to save to Google Drive instead.",
+        );
+        if (saveLocalFirst) {
+          await saveToLocalAs();
+          return;
+        }
+
+        await saveToGoogleDriveAs();
+      } catch (error) {
+        markSaveIndicatorError(
+          error instanceof Error ? error.message : String(error),
+        );
+        throw error;
+      } finally {
+        setIsSavingToCloud(false);
+      }
+    },
+    [
+      detectSaveConflict,
+      excalidrawAPI,
+      isSavingToCloud,
+      markSaveIndicatorConflict,
+      markSaveIndicatorError,
+      markSaveIndicatorSaved,
+      primaryFile,
+      saveToGoogleDriveAs,
+      saveToLocalAs,
+      suppressDirtyMark,
+    ],
+  );
+
+  handleSaveToCloudRef.current = handleSaveToCloud;
+
+  /* 0 = off. N ≥ 1: every N minutes, if the open file is dirty, save in place:
+     Google Drive file → Drive; local directory file → local disk. */
+  useEffect(() => {
+    if (workspaceAutosaveMinutes <= 0 || appMode !== "editor") {
+      return;
+    }
+    if (isCollaborating) {
       return;
     }
 
-    setIsSavingToCloud(true);
-    setSaveIndicatorStatus("saving");
-    setSaveIndicatorMessage("");
-    try {
-      if (primaryFile?.provider === "gdrive") {
-        const conflictCheck = await detectSaveConflict(primaryFile);
-
-        if (conflictCheck.hasConflict) {
-          const conflictMessage =
-            "Google Drive file changed since last open/save. Overwrite the remote version?";
-          markSaveIndicatorConflict(conflictMessage);
-
-          if (!window.confirm(conflictMessage)) {
-            return;
-          }
+    const intervalMs = workspaceAutosaveMinutes * 60_000;
+    const id = window.setInterval(() => {
+      void (async () => {
+        if (!excalidrawAPI) {
+          return;
         }
-
-        const normalizedName = normalizeExcalidrawFileName(primaryFile.name);
-        const blob = buildExcalidrawBlob({
-          elements: excalidrawAPI.getSceneElements(),
-          appState: excalidrawAPI.getAppState(),
-          files: excalidrawAPI.getFiles(),
-        });
-
-        const savedFile = await updateGoogleDriveFile({
-          fileId: primaryFile.fileId,
-          name: normalizedName,
-          blob,
-        });
-
-        const nextPrimaryFile: CloudFileRef = {
-          ...primaryFile,
-          name: savedFile.name,
-          mimeType: savedFile.mimeType,
-          folderId: savedFile.parents?.[0] || primaryFile.folderId,
-          modifiedTime: savedFile.modifiedTime,
-        };
-
-        setPrimaryFile(nextPrimaryFile);
-        suppressDirtyMark();
-        excalidrawAPI.updateScene({
-          appState: {
-            name: savedFile.name.replace(/\.excalidraw$/i, ""),
-          },
-          captureUpdate: CaptureUpdateAction.NEVER,
-        });
-        markSaveIndicatorSaved("Saved to Google Drive");
-        excalidrawAPI.setToast({
-          message: `Saved "${savedFile.name}" to Google Drive`,
-        });
-        return;
-      }
-
-      if (
-        primaryFile?.provider === "local" &&
-        primaryFile.fileHandle &&
-        primaryFile.directoryHandle
-      ) {
-        const conflictCheck = await detectSaveConflict(primaryFile);
-
-        if (conflictCheck.hasConflict) {
-          const conflictMessage =
-            "Local file changed on disk since last open/save. Overwrite the local version?";
-          markSaveIndicatorConflict(conflictMessage);
-
-          if (!window.confirm(conflictMessage)) {
-            return;
-          }
+        if (isSavingToCloudRef.current) {
+          return;
         }
+        const pf = primaryFileRef.current;
+        if (!pf || (pf.provider !== "gdrive" && pf.provider !== "local")) {
+          return;
+        }
+        if (saveIndicatorStatusRef.current !== "unsaved") {
+          return;
+        }
+        try {
+          await handleSaveToCloudRef.current({ auto: true });
+        } catch {
+          /* surfaced via save indicator */
+        }
+      })();
+    }, intervalMs);
 
-        const blob = buildExcalidrawBlob({
-          elements: excalidrawAPI.getSceneElements(),
-          appState: excalidrawAPI.getAppState(),
-          files: excalidrawAPI.getFiles(),
-        });
-
-        const savedFile = await updateLocalFile({
-          file: {
-            id: primaryFile.fileId,
-            name: primaryFile.name,
-            parentId: primaryFile.folderId,
-            path: primaryFile.path || primaryFile.fileId,
-            mimeType: primaryFile.mimeType,
-            modifiedTime: primaryFile.modifiedTime,
-            isExcalidrawFile: true,
-            fileHandle: primaryFile.fileHandle,
-            directoryHandle: primaryFile.directoryHandle,
-            parentDirectoryHandle: primaryFile.directoryHandle,
-          },
-          blob,
-        });
-
-        const nextPrimaryFile: CloudFileRef = {
-          ...primaryFile,
-          name: savedFile.name,
-          mimeType: savedFile.mimeType,
-          folderId: savedFile.parentId,
-          modifiedTime: savedFile.modifiedTime,
-          path: savedFile.path,
-          fileHandle: savedFile.fileHandle,
-          directoryHandle: savedFile.directoryHandle,
-        };
-
-        setPrimaryFile(nextPrimaryFile);
-        suppressDirtyMark();
-        excalidrawAPI.updateScene({
-          appState: {
-            name: savedFile.name.replace(/\.excalidraw$/i, ""),
-          },
-          captureUpdate: CaptureUpdateAction.NEVER,
-        });
-        markSaveIndicatorSaved("Saved to local directory");
-        excalidrawAPI.setToast({
-          message: `Saved "${savedFile.name}" to local directory`,
-        });
-        return;
-      }
-
-      const saveLocalFirst = window.confirm(
-        "Save to a local directory?\nPress Cancel to save to Google Drive instead.",
-      );
-      if (saveLocalFirst) {
-        await saveToLocalAs();
-        return;
-      }
-
-      await saveToGoogleDriveAs();
-    } catch (error) {
-      markSaveIndicatorError(
-        error instanceof Error ? error.message : String(error),
-      );
-      throw error;
-    } finally {
-      setIsSavingToCloud(false);
-    }
-  }, [
-    detectSaveConflict,
-    excalidrawAPI,
-    isSavingToCloud,
-    markSaveIndicatorConflict,
-    markSaveIndicatorError,
-    markSaveIndicatorSaved,
-    primaryFile,
-    saveToGoogleDriveAs,
-    saveToLocalAs,
-    suppressDirtyMark,
-  ]);
+    return () => window.clearInterval(id);
+  }, [appMode, excalidrawAPI, isCollaborating, workspaceAutosaveMinutes]);
 
   const handleSaveAsToCloud = useCallback(async () => {
     if (isSavingToCloud) {
@@ -2654,34 +2770,42 @@ const ExcalidrawWrapper = () => {
         return;
       }
 
-      const nextWidth = Math.max(Math.round(size.width), 1);
-      const nextHeight = Math.max(Math.round(size.height), 1);
+      const strokeW = Math.max(0, targetElement.strokeWidth ?? 0);
+      const pad = 2 * strokeW;
+      const contentWidth = Math.max(1, Math.ceil(size.width));
+      const contentHeight = Math.max(1, Math.ceil(size.height));
+      const outerWidth = contentWidth + pad;
+      const outerHeight = contentHeight + pad;
       const currentCustomData = (targetElement.customData || {}) as Record<
         string,
         unknown
       >;
       const resolvedWidth = Math.max(
-        nextWidth,
+        outerWidth,
         Math.max(targetElement.width, 1),
+      );
+      const resolvedHeight = Math.max(
+        outerHeight,
+        Math.max(targetElement.height, 1),
       );
 
       if (
         Math.abs(targetElement.width - resolvedWidth) < 1 &&
-        Math.abs(targetElement.height - nextHeight) < 1 &&
-        currentCustomData.intrinsicWidth === nextWidth &&
-        currentCustomData.intrinsicHeight === nextHeight
+        Math.abs(targetElement.height - resolvedHeight) < 1 &&
+        currentCustomData.intrinsicWidth === contentWidth &&
+        currentCustomData.intrinsicHeight === contentHeight
       ) {
         return;
       }
 
       const updatedElement = newElementWith(targetElement, {
         width: resolvedWidth,
-        height: nextHeight,
+        height: resolvedHeight,
         link: null,
         customData: {
           ...currentCustomData,
-          intrinsicWidth: nextWidth,
-          intrinsicHeight: nextHeight,
+          intrinsicWidth: contentWidth,
+          intrinsicHeight: contentHeight,
         },
       });
 
@@ -2816,6 +2940,7 @@ const ExcalidrawWrapper = () => {
     >
       <Excalidraw
         customToolbarExtraItems={EXCALIDRAW_APP_CUSTOM_TOOLBAR_ITEMS}
+        onDuplicate={remapUmlTemplatesOnDuplicate}
         onChange={onChange}
         onPointerDown={(activeTool, pointerDownState) => {
           const hitElement = pointerDownState.hit.element;
@@ -3254,6 +3379,9 @@ const ExcalidrawWrapper = () => {
           }
           currentFileId={primaryFile?.fileId ?? null}
           theme={editorTheme}
+          onWorkspaceToast={(message) => {
+            excalidrawAPI?.setToast({ message });
+          }}
         />
       )}
     </div>

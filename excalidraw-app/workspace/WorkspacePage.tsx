@@ -35,6 +35,7 @@ import {
   restoreStoredLocalRootFolder,
 } from "./data/localDirectory";
 import { normalizeExcalidrawFileName } from "./data/saveManager";
+import { exportWorkspaceTreeToZip } from "./workspaceExportTree";
 import { WorkspaceGrid } from "./components/WorkspaceGrid";
 import { WorkspaceTextDialog as WorkspaceTextDialogExternal } from "./components/WorkspaceTextDialog";
 import { WorkspaceTopbar } from "./components/WorkspaceTopbar";
@@ -73,6 +74,7 @@ type WorkspacePageProps = {
   currentFileProvider: "gdrive" | "local" | null;
   currentFileId: string | null;
   theme: "light" | "dark";
+  onWorkspaceToast?: (message: string) => void;
 };
 
 type WorkspaceFolderNode = {
@@ -414,6 +416,7 @@ export const WorkspacePage = ({
   currentFileProvider,
   currentFileId,
   theme,
+  onWorkspaceToast,
 }: WorkspacePageProps) => {
   const [selectedBackend, setSelectedBackend] = useState<BackendId>(
     getStoredWorkspaceBackend,
@@ -443,6 +446,7 @@ export const WorkspacePage = ({
   );
   const [openingFileId, setOpeningFileId] = useState<string | null>(null);
   const [openingFolderId, setOpeningFolderId] = useState<string | null>(null);
+  const [workspaceExporting, setWorkspaceExporting] = useState(false);
   const {
     pendingAction,
     setPendingAction,
@@ -808,6 +812,45 @@ export const WorkspacePage = ({
       setPendingAction(null);
     }
   }, [resetWorkspaceState, selectedBackend, setErrorMessage, setPendingAction]);
+
+  const handleExportWorkspace = useCallback(async () => {
+    if (!rootFolder) {
+      setErrorMessage(t("workspace.exportNeedRoot"));
+      return;
+    }
+
+    if (
+      rootFolder.provider === "google-drive" &&
+      (!isDriveConnected || missingEnvVars.length > 0)
+    ) {
+      setErrorMessage(t("workspace.exportNeedDrive"));
+      return;
+    }
+
+    if (rootFolder.provider === "local" && !isLocalSupported) {
+      setErrorMessage(t("workspace.exportLocalUnsupported"));
+      return;
+    }
+
+    setWorkspaceExporting(true);
+    try {
+      await exportWorkspaceTreeToZip(rootFolder);
+      onWorkspaceToast?.(t("workspace.exportSuccess"));
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : t("workspace.exportFailed"),
+      );
+    } finally {
+      setWorkspaceExporting(false);
+    }
+  }, [
+    isDriveConnected,
+    isLocalSupported,
+    missingEnvVars.length,
+    onWorkspaceToast,
+    rootFolder,
+    setErrorMessage,
+  ]);
 
   const handleToggleFolder = useCallback(
     async (folder: WorkspaceFolderNode) => {
@@ -1712,6 +1755,7 @@ export const WorkspacePage = ({
     >
       <div className="workspace-page__content">
         <WorkspaceTopbar
+          theme={theme}
           selectedBackend={selectedBackend}
           onChangeBackend={setSelectedBackend}
           onBackToEditor={onBackToEditor}
@@ -1740,6 +1784,15 @@ export const WorkspacePage = ({
           onRetryError={() => {
             void runErrorAction();
           }}
+          exportDisabled={
+            !rootFolder ||
+            workspaceExporting ||
+            (selectedBackend === "google-drive" &&
+              (!isDriveConnected || missingEnvVars.length > 0)) ||
+            (selectedBackend === "local" && !isLocalSupported)
+          }
+          exportBusy={workspaceExporting}
+          onExportWorkspace={handleExportWorkspace}
         />
         <section className="workspace-layout">
           <aside className="workspace-sidebar workspace-panel">

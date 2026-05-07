@@ -13,6 +13,8 @@ const CODE_BLOCK_PADDING_Y = 4;
 const CODE_BLOCK_LINE_HEIGHT = 1.55;
 const CODE_BLOCK_MIN_WIDTH = 24;
 const CODE_BLOCK_MIN_HEIGHT = 24;
+/** Subpixel / hljs span layout often needs a few extra px vs getBoundingClientRect. */
+const CODE_BLOCK_MEASURE_WIDTH_SLACK_PX = 8;
 const CODE_BLOCK_CACHE_LIMIT = 200;
 
 export const DEFAULT_CODE_BLOCK = `function greet(name: string) {
@@ -584,11 +586,20 @@ const getMeasuredCodeBlock = (
   );
   window.document.body.appendChild(container);
   const rect = container.getBoundingClientRect();
+  const wrapperEl = container.firstElementChild as HTMLElement | null;
+  const scrollW = Math.max(
+    container.scrollWidth,
+    wrapperEl?.scrollWidth ?? 0,
+    rect.width,
+  );
   window.document.body.removeChild(container);
 
   const nextMeasurement = {
     width: Math.ceil(
-      Math.max(CODE_BLOCK_MIN_WIDTH, rect.width || CODE_BLOCK_MIN_WIDTH),
+      Math.max(
+        CODE_BLOCK_MIN_WIDTH,
+        scrollW + CODE_BLOCK_MEASURE_WIDTH_SLACK_PX,
+      ),
     ),
     height: Math.ceil(
       Math.max(CODE_BLOCK_MIN_HEIGHT, rect.height || CODE_BLOCK_MIN_HEIGHT),
@@ -607,6 +618,23 @@ export const measureCodeBlockDimensions = (
   code: string,
   style?: Partial<CodeBlockStyle> | null,
 ) => getMeasuredCodeBlock(code, style);
+
+/**
+ * Custom embeddables are wrapped in `.excalidraw__embeddable__outer` with
+ * `padding: element.strokeWidth`, so the inner content area is smaller than
+ * `element.width` / `element.height` by `2 * strokeWidth` on each axis.
+ */
+export const getCodeBlockEmbeddableOuterDimensions = (
+  contentWidth: number,
+  contentHeight: number,
+  strokeWidth: number,
+) => {
+  const pad = 2 * Math.max(0, strokeWidth);
+  return {
+    width: Math.max(1, Math.ceil(contentWidth + pad)),
+    height: Math.max(1, Math.ceil(contentHeight + pad)),
+  };
+};
 
 const createExportStyleBlock = (style: CodeBlockStyle, lineCount: number) => {
   const themeTokens = getCodeBlockThemeTokens(style.theme);

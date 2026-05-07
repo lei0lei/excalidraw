@@ -332,6 +332,8 @@
     "mathFormula": "Math formula",
     "codeBlock": "Code block",
     "templateLibrary": "Template library",
+    "templateInsertedUmlClass": "Inserted UML class diagram ({{preset}})",
+    "templateInsertedUmlDiagram": "Inserted UML diagram ({{preset}})",
     "convertElementType": "Toggle shape type"
   },
   "mathFormula": {
@@ -751,6 +753,7 @@
     "placeholder": "Quick search"
   },
   "workspace": {
+    "openFromToolbar": "Workspace — browse and open files",
     "backToEditor": "Back to editor",
     "storageBackend": "Storage backend",
     "googleDrive": "Google Drive",
@@ -769,7 +772,22 @@
     "loadingFolderContent": "Loading folder content...",
     "emptyFolder": "No child folders or .excalidraw files in the current folder yet.",
     "open": "Open",
-    "previewPending": "Preview pending"
+    "previewPending": "Preview pending",
+    "settingsMenu": "Workspace settings",
+    "settingsExportLabel": "Export",
+    "settingsAutoSaveLabel": "Autosave",
+    "autoSaveUnit": "min",
+    "exportTreeZip": "Export folder as ZIP",
+    "exporting": "Exporting…",
+    "exportSuccess": "Workspace folder downloaded as ZIP.",
+    "exportFailed": "Export failed.",
+    "exportNeedRoot": "Choose a workspace folder first.",
+    "exportNeedDrive": "Connect Google Drive and pick a folder before exporting.",
+    "exportLocalUnsupported": "This browser does not support local directory export.",
+    "autoSaveInterval": "Autosave (editor)",
+    "autoSaveOff": "Off",
+    "autoSaveMinutesValue": "{{minutes}} min",
+    "autoSaveHint": "How often to save the open Google Drive or local file while you are in the editor. Set to 0 to turn off. Does not run during collaboration."
   },
   "fontList": {
     "badge": {
