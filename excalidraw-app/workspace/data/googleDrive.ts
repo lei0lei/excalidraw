@@ -39,6 +39,8 @@ let tokenClientPromise: Promise<any> | null = null;
 let accessToken: string | null = null;
 let accessTokenExpiresAt = 0;
 let hasRestoredStoredAccessToken = false;
+/** Deduplicate concurrent GIS token popups (refresh / connect). */
+let interactiveTokenRefreshPromise: Promise<string> | null = null;
 
 const GOOGLE_DRIVE_FILES_API = "https://www.googleapis.com/drive/v3/files";
 const GOOGLE_SCRIPT_LOAD_TIMEOUT_MS = 15000;
@@ -258,23 +260,7 @@ const ensurePickerModule = async () => {
   return googlePickerModulePromise;
 };
 
-const requestAccessToken = async ({
-  prompt = "",
-  interactive = false,
-}: {
-  prompt?: "" | "consent";
-  interactive?: boolean;
-} = {}) => {
-  restoreStoredAccessToken();
-
-  if (accessToken && Date.now() < accessTokenExpiresAt) {
-    return accessToken;
-  }
-
-  if (!interactive) {
-    throw new Error("Google Drive is not connected. Please connect first.");
-  }
-
+const runInteractiveTokenRequest = async (prompt: "" | "consent") => {
   const tokenClient = await ensureTokenClient();
 
   return new Promise<string>((resolve, reject) => {
@@ -306,12 +292,65 @@ const requestAccessToken = async ({
   });
 };
 
+const requestAccessToken = async ({
+  prompt = "",
+  interactive = false,
+}: {
+  prompt?: "" | "consent";
+  interactive?: boolean;
+} = {}) => {
+  restoreStoredAccessToken();
+
+  if (accessToken && Date.now() < accessTokenExpiresAt) {
+    return accessToken;
+  }
+
+  if (!interactive) {
+    throw new Error("Google Drive is not connected. Please connect first.");
+  }
+
+  if (interactiveTokenRefreshPromise) {
+    return interactiveTokenRefreshPromise;
+  }
+
+  interactiveTokenRefreshPromise = runInteractiveTokenRequest(prompt);
+
+  try {
+    return await interactiveTokenRefreshPromise;
+  } finally {
+    interactiveTokenRefreshPromise = null;
+  }
+};
+
 export const connectGoogleDrive = async () => {
   await requestAccessToken({ prompt: "consent", interactive: true });
 };
 
+/** Uses prompt "" so Google can re-issue a token without forcing consent when the browser session is still valid. */
 export const getGoogleDriveAccessToken = async () => {
-  return requestAccessToken({ prompt: "", interactive: false });
+  return requestAccessToken({ prompt: "", interactive: true });
+};
+
+const fetchWithGoogleDriveAuth = async (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  isRetry = false,
+): Promise<Response> => {
+  const token = await getGoogleDriveAccessToken();
+  const headers = new Headers(init?.headers ?? undefined);
+  headers.set("Authorization", `Bearer ${token}`);
+
+  const response = await fetch(input, {
+    ...init,
+    headers,
+  });
+
+  if (response.status === 401 && !isRetry) {
+    clearStoredAccessToken();
+    return fetchWithGoogleDriveAuth(input, init, true);
+  }
+
+  return response;
 };
 
 export const hasStoredGoogleDriveAccessToken = () => {
@@ -355,14 +394,7 @@ const fetchGoogleDriveJson = async <T>(
   input: string,
   init?: RequestInit,
 ): Promise<T> => {
-  const token = await getGoogleDriveAccessToken();
-  const response = await fetch(input, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers || {}),
-    },
-  });
+  const response = await fetchWithGoogleDriveAuth(input, init);
 
   if (!response.ok) {
     throw new Error(
@@ -442,16 +474,11 @@ export const downloadGoogleDriveFile = async (
   fileName: string,
   mimeType = "application/octet-stream",
 ) => {
-  const token = await getGoogleDriveAccessToken();
   const url = new URL(`${GOOGLE_DRIVE_FILES_API}/${fileId}`);
   url.searchParams.set("alt", "media");
   url.searchParams.set("supportsAllDrives", "true");
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const response = await fetchWithGoogleDriveAuth(url.toString());
 
   if (!response.ok) {
     throw new Error(
@@ -478,7 +505,6 @@ const uploadGoogleDriveFile = async ({
   metadata: Record<string, unknown>;
   blob: Blob;
 }) => {
-  const token = await getGoogleDriveAccessToken();
   const boundary = `-------excalidraw-${Date.now().toString(16)}`;
   const delimiter = `\r\n--${boundary}\r\n`;
   const closeDelimiter = `\r\n--${boundary}--`;
@@ -502,10 +528,9 @@ const uploadGoogleDriveFile = async ({
   url.searchParams.set("supportsAllDrives", "true");
   url.searchParams.set("fields", "id,name,mimeType,modifiedTime,parents");
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithGoogleDriveAuth(url.toString(), {
     method,
     headers: {
-      Authorization: `Bearer ${token}`,
       "Content-Type": `multipart/related; boundary=${boundary}`,
     },
     body: multipartBody,
@@ -555,15 +580,13 @@ export const createGoogleDriveFolder = async ({
   parentId: string;
   name: string;
 }) => {
-  const token = await getGoogleDriveAccessToken();
   const url = new URL(GOOGLE_DRIVE_FILES_API);
   url.searchParams.set("supportsAllDrives", "true");
   url.searchParams.set("fields", "id,name,mimeType,modifiedTime");
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithGoogleDriveAuth(url.toString(), {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json; charset=UTF-8",
     },
     body: JSON.stringify({
@@ -591,15 +614,13 @@ export const renameGoogleDriveEntry = async ({
   entryId: string;
   name: string;
 }) => {
-  const token = await getGoogleDriveAccessToken();
   const url = new URL(`${GOOGLE_DRIVE_FILES_API}/${entryId}`);
   url.searchParams.set("supportsAllDrives", "true");
   url.searchParams.set("fields", "id,name,mimeType,modifiedTime,parents");
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithGoogleDriveAuth(url.toString(), {
     method: "PATCH",
     headers: {
-      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json; charset=UTF-8",
     },
     body: JSON.stringify({ name }),
@@ -621,15 +642,11 @@ export const renameGoogleDriveEntry = async ({
 };
 
 export const deleteGoogleDriveEntry = async (entryId: string) => {
-  const token = await getGoogleDriveAccessToken();
   const url = new URL(`${GOOGLE_DRIVE_FILES_API}/${entryId}`);
   url.searchParams.set("supportsAllDrives", "true");
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithGoogleDriveAuth(url.toString(), {
     method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
   });
 
   if (!response.ok) {
@@ -662,16 +679,11 @@ export const updateGoogleDriveFile = async ({
 };
 
 export const getGoogleDriveFileMetadata = async (fileId: string) => {
-  const token = await getGoogleDriveAccessToken();
   const url = new URL(`${GOOGLE_DRIVE_FILES_API}/${fileId}`);
   url.searchParams.set("supportsAllDrives", "true");
   url.searchParams.set("fields", "id,name,mimeType,modifiedTime,parents");
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const response = await fetchWithGoogleDriveAuth(url.toString());
 
   if (!response.ok) {
     throw new Error(
