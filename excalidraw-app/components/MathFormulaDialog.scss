@@ -95,7 +95,8 @@
       inline-size: 1.75rem;
       block-size: 1.75rem;
       border-radius: 0.5rem;
-      border: 1px solid color-mix(in srgb, var(--color-gray-20) 70%, transparent);
+      border: 1px solid
+        color-mix(in srgb, var(--color-gray-20) 70%, transparent);
       background: color-mix(in srgb, var(--island-bg-color) 92%, transparent);
       color: var(--text-secondary-color);
       display: inline-flex;
@@ -122,8 +123,16 @@
     }
 
     &__iconButton--primary {
-      border-color: color-mix(in srgb, var(--color-brand-active) 55%, transparent);
-      background: color-mix(in srgb, var(--color-brand-active) 14%, transparent);
+      border-color: color-mix(
+        in srgb,
+        var(--color-brand-active) 55%,
+        transparent
+      );
+      background: color-mix(
+        in srgb,
+        var(--color-brand-active) 14%,
+        transparent
+      );
       color: var(--text-primary-color);
     }
 

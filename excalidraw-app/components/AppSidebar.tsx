@@ -5,12 +5,15 @@ import {
 } from "@excalidraw/excalidraw/components/icons";
 import { t } from "@excalidraw/excalidraw/i18n";
 
+import { ChartGraphicSidebar } from "./ChartGraphicSidebar";
 import { UmlClassSidebar } from "./UmlClassSidebar";
 import { UmlDiagramSidebar } from "./UmlDiagramSidebar";
 
 import "./AppSidebar.scss";
 
 import type {
+  BarChartTemplateData,
+  ChartGraphicPreset,
   UmlClassTemplateData,
   UmlDiagramTemplateData,
 } from "../templates";
@@ -39,6 +42,10 @@ export const AppSidebar = ({
   onChangeUmlTemplate,
   umlDiagramTemplateData,
   onChangeUmlDiagramTemplate,
+  chartGraphicPreset,
+  barChartTemplateData,
+  onBarChartTemplateChange,
+  barChartTemplateRootId,
 }: {
   onOpenWorkspace: () => void;
   onInstallPWA?: () => void;
@@ -47,10 +54,15 @@ export const AppSidebar = ({
   onChangeUmlTemplate?: (data: UmlClassTemplateData) => void;
   umlDiagramTemplateData?: UmlDiagramTemplateData | null;
   onChangeUmlDiagramTemplate?: (data: UmlDiagramTemplateData) => void;
+  chartGraphicPreset?: ChartGraphicPreset | null;
+  barChartTemplateData?: BarChartTemplateData | null;
+  onBarChartTemplateChange?: (data: BarChartTemplateData) => void;
+  barChartTemplateRootId?: string | null;
 }) => {
-  const shouldShowUmlEditor =
+  const shouldShowTemplateEditor =
     (umlTemplateData && onChangeUmlTemplate) ||
-    (umlDiagramTemplateData && onChangeUmlDiagramTemplate);
+    (umlDiagramTemplateData && onChangeUmlDiagramTemplate) ||
+    chartGraphicPreset != null;
 
   return (
     <DefaultSidebar>
@@ -75,13 +87,13 @@ export const AppSidebar = ({
             {downloadIcon}
           </button>
         )}
-        {shouldShowUmlEditor && (
+        {shouldShowTemplateEditor && (
           <Sidebar.TabTrigger tab={UML_TAB_ID} title="Template editor">
             {UmlTemplateIcon}
           </Sidebar.TabTrigger>
         )}
       </DefaultSidebar.TabTriggers>
-      {shouldShowUmlEditor && (
+      {shouldShowTemplateEditor && (
         <Sidebar.Tab tab={UML_TAB_ID}>
           {umlTemplateData && onChangeUmlTemplate ? (
             <UmlClassSidebar
@@ -92,6 +104,13 @@ export const AppSidebar = ({
             <UmlDiagramSidebar
               data={umlDiagramTemplateData}
               onChange={onChangeUmlDiagramTemplate}
+            />
+          ) : chartGraphicPreset ? (
+            <ChartGraphicSidebar
+              preset={chartGraphicPreset}
+              barChartData={barChartTemplateData}
+              onBarChartChange={onBarChartTemplateChange}
+              barChartTemplateRootId={barChartTemplateRootId}
             />
           ) : null}
         </Sidebar.Tab>

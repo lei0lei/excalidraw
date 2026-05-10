@@ -4,11 +4,18 @@ import type { ExcalidrawElement } from "@excalidraw/element/types";
 import type { AppState } from "@excalidraw/excalidraw/types";
 
 import {
+  areBarChartTemplateDataEqual,
+  readBarChartTemplateDataFromRoot,
+  serializeBarChartTemplateDataForSync,
+  type BarChartTemplateData,
+  getChartGraphicPresetFromElement,
   getUmlClassTemplateData,
-  resolveSelectedUmlClassTemplateRootWithMap,
   getUmlDiagramTemplateData,
   isEditableUmlDiagramTemplatePreset,
+  resolveSelectedChartGraphicRootWithMap,
+  resolveSelectedUmlClassTemplateRootWithMap,
   resolveSelectedUmlDiagramTemplateRootWithMap,
+  type ChartGraphicPreset,
   type UmlClassTemplateData,
   type UmlDiagramTemplateData,
 } from "../templates";
@@ -97,6 +104,9 @@ export type UmlTemplateSceneSyncParams = {
   setSelectedUmlClassData: (data: UmlClassTemplateData | null) => void;
   setSelectedUmlDiagramRootId: (id: string | null) => void;
   setSelectedUmlDiagramData: (data: UmlDiagramTemplateData | null) => void;
+  setSelectedChartGraphicRootId: (id: string | null) => void;
+  setSelectedChartGraphicPreset: (preset: ChartGraphicPreset | null) => void;
+  setSelectedBarChartTemplateData: (data: BarChartTemplateData | null) => void;
 };
 
 /**
@@ -115,6 +125,9 @@ export function useUmlTemplateSceneSync({
   setSelectedUmlClassData,
   setSelectedUmlDiagramRootId,
   setSelectedUmlDiagramData,
+  setSelectedChartGraphicRootId,
+  setSelectedChartGraphicPreset,
+  setSelectedBarChartTemplateData,
 }: UmlTemplateSceneSyncParams) {
   const selectedUmlClassRootIdRef = useRef<string | null>(null);
   const selectedUmlClassDataRef = useRef<UmlClassTemplateData | null>(null);
@@ -122,6 +135,12 @@ export function useUmlTemplateSceneSync({
   const selectedUmlDiagramRootIdRef = useRef<string | null>(null);
   const selectedUmlDiagramDataRef = useRef<UmlDiagramTemplateData | null>(null);
   const umlDiagramSelectionSignatureRef = useRef("");
+  const selectedChartGraphicRootIdRef = useRef<string | null>(null);
+  const selectedChartGraphicPresetRef = useRef<ChartGraphicPreset | null>(null);
+  const chartGraphicSelectionSignatureRef = useRef("");
+  const selectedBarChartTemplateDataRef = useRef<BarChartTemplateData | null>(
+    null,
+  );
 
   type PendingSync = {
     appState: AppState;
@@ -250,10 +269,81 @@ export function useUmlTemplateSceneSync({
             });
           }
         }
+
+        const selectedChartGraphicRoot = resolveSelectedChartGraphicRootWithMap(
+          elementsById,
+          appState.selectedElementIds,
+        );
+        const nextChartPreset = selectedChartGraphicRoot
+          ? getChartGraphicPresetFromElement(selectedChartGraphicRoot)
+          : null;
+        const nextSelectedChartGraphicRootId = nextChartPreset
+          ? selectedChartGraphicRoot?.id || null
+          : null;
+        const nextBarData =
+          nextChartPreset === "bar-chart" && selectedChartGraphicRoot
+            ? readBarChartTemplateDataFromRoot(selectedChartGraphicRoot)
+            : null;
+        const chartSubSignature =
+          nextChartPreset === "bar-chart"
+            ? serializeBarChartTemplateDataForSync(nextBarData)
+            : "";
+        const nextChartGraphicSelectionSignature = buildUmlSelectionSignature(
+          selectedElementIdsSignature,
+          nextSelectedChartGraphicRootId,
+          [nextChartPreset || "", chartSubSignature].join("@@"),
+        );
+
+        if (
+          chartGraphicSelectionSignatureRef.current !==
+          nextChartGraphicSelectionSignature
+        ) {
+          chartGraphicSelectionSignatureRef.current =
+            nextChartGraphicSelectionSignature;
+
+          const chartRootChanged =
+            selectedChartGraphicRootIdRef.current !==
+            nextSelectedChartGraphicRootId;
+          const chartPresetChanged =
+            selectedChartGraphicPresetRef.current !== nextChartPreset;
+          const barDataChanged = !areBarChartTemplateDataEqual(
+            selectedBarChartTemplateDataRef.current,
+            nextBarData,
+          );
+
+          if (chartRootChanged) {
+            selectedChartGraphicRootIdRef.current =
+              nextSelectedChartGraphicRootId;
+          }
+          if (chartPresetChanged) {
+            selectedChartGraphicPresetRef.current = nextChartPreset;
+          }
+          if (barDataChanged) {
+            selectedBarChartTemplateDataRef.current = nextBarData;
+          }
+
+          if (chartRootChanged || chartPresetChanged || barDataChanged) {
+            const nextChartRoot = nextSelectedChartGraphicRootId;
+            const nextPreset = nextChartPreset;
+            const nextBar = nextBarData;
+            queueMicrotask(() => {
+              if (chartRootChanged) {
+                setSelectedChartGraphicRootId(nextChartRoot);
+              }
+              if (chartPresetChanged) {
+                setSelectedChartGraphicPreset(nextPreset);
+              }
+              if (barDataChanged) {
+                setSelectedBarChartTemplateData(nextBar);
+              }
+            });
+          }
+        }
       } catch (error) {
         console.error("Failed to sync UML template sidebar state", error);
         umlClassSelectionSignatureRef.current = "";
         umlDiagramSelectionSignatureRef.current = "";
+        chartGraphicSelectionSignatureRef.current = "";
         if (selectedUmlClassRootIdRef.current !== null) {
           selectedUmlClassRootIdRef.current = null;
           setSelectedUmlClassRootId(null);
@@ -270,6 +360,18 @@ export function useUmlTemplateSceneSync({
           selectedUmlDiagramDataRef.current = null;
           setSelectedUmlDiagramData(null);
         }
+        if (selectedChartGraphicRootIdRef.current !== null) {
+          selectedChartGraphicRootIdRef.current = null;
+          setSelectedChartGraphicRootId(null);
+        }
+        if (selectedChartGraphicPresetRef.current !== null) {
+          selectedChartGraphicPresetRef.current = null;
+          setSelectedChartGraphicPreset(null);
+        }
+        if (selectedBarChartTemplateDataRef.current !== null) {
+          selectedBarChartTemplateDataRef.current = null;
+          setSelectedBarChartTemplateData(null);
+        }
       }
     },
     [
@@ -277,6 +379,9 @@ export function useUmlTemplateSceneSync({
       setSelectedUmlClassData,
       setSelectedUmlDiagramRootId,
       setSelectedUmlDiagramData,
+      setSelectedChartGraphicRootId,
+      setSelectedChartGraphicPreset,
+      setSelectedBarChartTemplateData,
     ],
   );
 

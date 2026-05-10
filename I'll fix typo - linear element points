@@ -1,0 +1,307 @@
+import { FONT_FAMILY, randomId } from "@excalidraw/common";
+import {
+  newElement,
+  newElementWith,
+  newLinearElement,
+  newTextElement,
+} from "@excalidraw/element";
+
+import type { FillStyle } from "@excalidraw/element/types";
+import type { ExcalidrawElement } from "@excalidraw/element/types";
+import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
+import type { Radians } from "@excalidraw/math";
+
+import {
+  CHART_GRAPHIC_TEMPLATE_TYPE,
+  CHART_GRAPHIC_TEMPLATE_VERSION,
+  type ChartGraphicTemplateCustomDataChild,
+} from "./chart-graphic-metadata";
+
+import type { BarChartItemData, BarChartTemplateData } from "./bar-chart-types";
+
+/** Outer frame dimensions for the bar chart template widget. */
+export const BAR_CHART_FRAME_W = 400;
+export const BAR_CHART_FRAME_H = 280;
+
+const LEFT_PAD = 56;
+const TOP_PAD = 52;
+const BOTTOM_AXIS_PAD = 34;
+const RIGHT_PAD = 20;
+const LEGEND_WIDTH = 86;
+const CATEGORY_ROW = 42;
+const MUTED_TEXT = "#6b7280";
+const CHART_FONT = FONT_FAMILY.Excalida;
+
+export const BAR_CHART_DEFAULT_COLORS = [
+  "#6366f1",
+  "#8b5cf6",
+  "#ec4899",
+  "#14b8a6",
+  "#f59e0b",
+  "#eab308",
+  "#84cc16",
+  "#06b6d4",
+];
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const wrapFillStyle = (value: unknown): FillStyle =>
+  value === "hachure" ||
+  value === "cross-hatch" ||
+  value === "solid" ||
+  value === "zigzag"
+    ? value
+    : "solid";
+
+/** Default sketch used when inserting a bar chart from the template library. */
+export const createDefaultBarChartTemplateData = (): BarChartTemplateData => {
+  const heightPattern = [0.35, 0.62, 0.28, 0.72, 0.45];
+
+  const items = heightPattern.map((value, index) =>
+    normalizeBarChartItem({
+      id: randomId(),
+      label: `${index + 1}`,
+      backgroundColor:
+        BAR_CHART_DEFAULT_COLORS[index % BAR_CHART_DEFAULT_COLORS.length]!,
+      strokeColor:
+        BAR_CHART_DEFAULT_COLORS[index % BAR_CHART_DEFAULT_COLORS.length]!,
+      value,
+    }),
+  );
+
+  return {
+    title: "Histogram",
+    xAxisLabel: "Category",
+    yAxisLabel: "Value",
+    items,
+    fillStyle: "hachure",
+    legendVisible: true,
+    roughness: 2,
+  };
+};
+
+export const normalizeBarChartItem = (input: Partial<BarChartItemData>): BarChartItemData => ({
+  id: typeof input.id === "string" && input.id.trim() ? input.id : randomId(),
+  label: typeof input.label === "string" ? input.label : "",
+  backgroundColor:
+    typeof input.backgroundColor === "string" && input.backgroundColor
+      ? input.backgroundColor
+      : BAR_CHART_DEFAULT_COLORS[0]!,
+  strokeColor:
+    typeof input.strokeColor === "string" && input.strokeColor
+      ? input.strokeColor
+      : BAR_CHART_DEFAULT_COLORS[0]!,
+  value: clamp(
+    typeof input.value === "number" && Number.isFinite(input.value)
+      ? input.value
+      : 0.35,
+    0,
+    1,
+  ),
+});
+
+export const normalizeBarChartTemplateData = (
+  data: Partial<BarChartTemplateData> | undefined | null,
+): BarChartTemplateData => {
+  const defaults = createDefaultBarChartTemplateData();
+  let items =
+    Array.isArray(data?.items) && data.items.length
+      ? data.items.map((item) => normalizeBarChartItem(item ?? {}))
+      : defaults.items.slice();
+
+  if (items.length > 40) {
+    items = items.slice(0, 40);
+  }
+  if (items.length === 0) {
+    items = defaults.items.slice(0, 1);
+  }
+
+  const title =
+    typeof data?.title === "string" ? data.title : defaults.title;
+  const xAxisLabel =
+    typeof data?.xAxisLabel === "string"
+      ? data.xAxisLabel
+      : defaults.xAxisLabel;
+  const yAxisLabel =
+    typeof data?.yAxisLabel === "string"
+      ? data?.yAxisLabel
+      : defaults.yAxisLabel;
+  const legendVisible =
+    typeof data?.legendVisible === "boolean"
+      ? data.legendVisible
+      : defaults.legendVisible;
+  const roughness = clamp(
+    typeof data?.roughness === "number" && Number.isFinite(data.roughness)
+      ? Math.round(data.roughness)
+      : defaults.roughness,
+    0,
+    3,
+  );
+
+  return normalizeBarChartTemplateDataStrict({
+    title,
+    xAxisLabel,
+    yAxisLabel,
+    items,
+    fillStyle: wrapFillStyle(data?.fillStyle ?? defaults.fillStyle),
+    legendVisible,
+    roughness,
+  });
+};
+
+const normalizeBarChartTemplateDataStrict = (
+  input: Omit<BarChartTemplateData, "items"> & { items: BarChartItemData[] },
+): BarChartTemplateData => ({
+  ...input,
+  items: input.items.map((item) =>
+    normalizeBarChartItem({
+      ...item,
+    }),
+  ),
+});
+
+const childCustomData = (rootId: string): ChartGraphicTemplateCustomDataChild => ({
+  templateType: CHART_GRAPHIC_TEMPLATE_TYPE,
+  templateVersion: CHART_GRAPHIC_TEMPLATE_VERSION,
+  templateRole: "child",
+  templateRootId: rootId,
+});
+
+const textRoughnessFor = (roughness: number) =>
+  roughness <= 1 ? roughness : 1;
+
+const plotMetrics = (
+  left: number,
+  top: number,
+  legendVisible: boolean,
+) => {
+  const legendSlot = legendVisible ? LEGEND_WIDTH : 0;
+  const bx0 = left + LEFT_PAD;
+  const by0 = top + TOP_PAD;
+  const plotW =
+    BAR_CHART_FRAME_W - LEFT_PAD - RIGHT_PAD - legendSlot - (legendVisible ? 6 : 0);
+  const plotH =
+    BAR_CHART_FRAME_H - TOP_PAD - BOTTOM_AXIS_PAD - CATEGORY_ROW - (legendVisible ? 4 : 0);
+
+  const legendLeft = bx0 + plotW + (legendVisible ? 18 : 0);
+  const legendTop = top + TOP_PAD;
+
+  return { bx0, by0, plotW, plotH, legendLeft, legendTop };
+};
+
+const barLayouts = (
+  items: readonly BarChartItemData[],
+  plotW: number,
+  plotH: number,
+): { gap: number; barW: number } => {
+  const n = Math.max(1, items.length);
+  const gap = clamp((plotW * 0.08) / n, 4, 12);
+  const barW = Math.max(8, (plotW - gap * (n + 1)) / n);
+
+  const maxBarSum = gap * (n + 1) + 8 * n;
+  let nextGap = gap;
+  let nextW = barW;
+  if (gap * (n + 1) + barW * n > plotW && maxBarSum <= plotW) {
+    nextW = (plotW - gap * (n + 1)) / n;
+  } else if (gap * (n + 1) + barW * n > plotW) {
+    nextGap = Math.max(2, plotW / (2 * n + 1));
+    nextW = Math.max(
+      4,
+      (plotW - nextGap * (n + 1)) / Math.max(1, n),
+    );
+  }
+
+  return { gap: nextGap, barW: Math.min(44, Math.max(6, nextW)) };
+};
+
+/**
+ * Builds the outer frame rectangle (root) plus all inner geometry for one bar-chart instance.
+ */
+export const buildInitialBarChartElements = ({
+  frameX,
+  frameY,
+  groupIds,
+  data,
+}: {
+  frameX: number;
+  frameY: number;
+  groupIds: string[];
+  data: BarChartTemplateData;
+}): NonDeletedExcalidrawElement[] => {
+  const normalized = normalizeBarChartTemplateData(data);
+  const r = normalized.roughness;
+  const frame = newElement({
+    type: "rectangle",
+    x: frameX,
+    y: frameY,
+    width: BAR_CHART_FRAME_W,
+    height: BAR_CHART_FRAME_H,
+    strokeColor: "#374151",
+    backgroundColor: "#f9fafb",
+    fillStyle: "solid",
+    strokeWidth: 1.5,
+    roundness: { type: 3, value: 12 },
+    roughness: r,
+    groupIds,
+  });
+
+  const rootId = frame.id;
+
+  const children = buildBarChartChildElementsInternal(
+    frameX,
+    frameY,
+    groupIds,
+    rootId,
+    normalized,
+    r,
+    true,
+  );
+
+  return [
+    frame,
+    ...children.map((el) =>
+      newElementWith(el, { customData: childCustomData(rootId) }),
+    ),
+  ];
+};
+
+const buildBarChartChildElementsInternal = (
+  frameX: number,
+  frameY: number,
+  groupIds: readonly string[],
+  rootId: string,
+  normalized: BarChartTemplateData,
+  roughness: number,
+  omitCustomOnChildren: boolean,
+): NonDeletedExcalidrawElement[] => {
+  const els: NonDeletedExcalidrawElement[] = [];
+  const { bx0, by0, plotW, plotH, legendLeft, legendTop } = plotMetrics(
+    frameX,
+    frameY,
+    normalized.legendVisible,
+  );
+
+  els.push(
+    newTextElement({
+      x: frameX + BAR_CHART_FRAME_W / 2,
+      y: frameY + 22,
+      text: normalized.title,
+      originalText: normalized.title,
+      fontSize: 18,
+      fontFamily: FONT_FAMILY.Excalida,
+      textAlign: "center",
+      strokeColor: "#111827",
+      roughness: textRoughnessFor(roughness),
+      groupIds: [...groupIds],
+    }),
+  );
+
+  els.push(
+    newLinearElement({
+      type: "line",
+      x: bx0,
+      y: by0 + plotH,
+      width: plotW,
+      height: 0,
+      points: [[0, 0], [plotW, 0]] as ExcalidrawElement["customData"], // WRONG typing

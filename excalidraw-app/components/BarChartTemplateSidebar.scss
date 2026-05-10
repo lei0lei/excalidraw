@@ -1,0 +1,333 @@
+.BarChartTemplateSidebar {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+
+  fieldset {
+    border: none;
+    padding: 0;
+    margin: 0 0 12px;
+  }
+
+  legend {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary-color);
+    margin-bottom: 6px;
+  }
+
+  .buttonList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .buttonList label {
+    position: relative;
+    display: flex;
+    width: 1.75rem;
+    height: 1.75rem;
+    min-width: 1.75rem;
+    min-height: 1.75rem;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 4px;
+    background: var(--button-bg, var(--island-bg-color));
+    border: 1px solid var(--sidebar-border-color);
+    color: var(--icon-fill-color);
+  }
+
+  .buttonList label:hover {
+    background: var(--button-hover-bg, var(--island-bg-color));
+  }
+
+  .buttonList label.active {
+    background: var(--button-selected-bg, rgba(105, 101, 219, 0.1));
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .buttonList input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.BarChartTemplateSidebar__panelTitle {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary-color);
+}
+
+.BarChartTemplateSidebar__inlineField {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.BarChartTemplateSidebar__inlineLabel {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary-color);
+  min-width: 2.75rem;
+}
+
+.BarChartTemplateSidebar__input--inline {
+  flex: 1;
+  min-width: 0;
+}
+
+.BarChartTemplateSidebar__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.BarChartTemplateSidebar__swatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--sidebar-border-color);
+  padding: 0;
+  cursor: pointer;
+  background: var(--swatch, transparent);
+  box-sizing: border-box;
+}
+
+.BarChartTemplateSidebar__swatch--active {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.BarChartTemplateSidebar__swatch--transparent {
+  background: linear-gradient(45deg, #ccc 25%, transparent 25%),
+    linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%),
+    linear-gradient(-45deg, transparent 75%, #ccc 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+
+.BarChartTemplateSidebar__toggleRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.BarChartTemplateSidebar__toggleLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary-color);
+}
+
+.BarChartTemplateSidebar__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.BarChartTemplateSidebar__sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary-color);
+}
+
+.BarChartTemplateSidebar__sectionHeader--items {
+  margin-top: 12px;
+}
+
+.BarChartTemplateSidebar__subsectionTitle {
+  margin-top: -4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-secondary-color, var(--color-gray-50));
+  opacity: 0.88;
+}
+
+.BarChartTemplateSidebar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.BarChartTemplateSidebar__field--row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.BarChartTemplateSidebar__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary-color);
+}
+
+.BarChartTemplateSidebar__input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--sidebar-border-color);
+  border-radius: 10px;
+  background: var(--input-bg-color, var(--island-bg-color));
+  color: var(--text-primary-color);
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.BarChartTemplateSidebar__input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.BarChartTemplateSidebar__input--sm {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.BarChartTemplateSidebar__range {
+  width: 100%;
+  max-width: 220px;
+}
+
+.BarChartTemplateSidebar__rangeValue {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.BarChartTemplateSidebar__iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--sidebar-border-color);
+  background: var(--island-bg-color);
+  color: var(--text-primary-color);
+  cursor: pointer;
+}
+
+.BarChartTemplateSidebar__iconButton:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.BarChartTemplateSidebar__iconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.BarChartTemplateSidebar__iconButton--danger:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.BarChartTemplateSidebar__items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.BarChartTemplateSidebar__item {
+  border: 1px solid var(--sidebar-border-color);
+  border-radius: 12px;
+  padding: 14px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--input-bg-color, var(--island-bg-color));
+}
+
+.BarChartTemplateSidebar__itemHeadRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.BarChartTemplateSidebar__itemHeadRow .BarChartTemplateSidebar__input {
+  flex: 1;
+  min-width: 0;
+}
+
+.BarChartTemplateSidebar__iconButton--compact {
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  flex-shrink: 0;
+}
+
+.BarChartTemplateSidebar__colorPickerShell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px auto;
+  align-items: center;
+  padding: 0.25rem 0;
+  width: 100%;
+  column-gap: 0;
+}
+
+.BarChartTemplateSidebar__colorPickerSeparator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  height: 100%;
+}
+
+.BarChartTemplateSidebar__colorPickerTriggerCell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.BarChartTemplateSidebar__colorSwatches.color-picker__top-picks {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 6px;
+}
+
+.BarChartTemplateSidebar__valueRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.BarChartTemplateSidebar__valueRow .BarChartTemplateSidebar__input {
+  flex: 1;
+  min-width: 0;
+}
+
+.BarChartTemplateSidebar__fillRow {
+  padding: 0;
+  margin: 0;
+}
+
+.BarChartTemplateSidebar__percent {
+  font-size: 12px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}

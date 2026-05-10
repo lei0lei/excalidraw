@@ -709,7 +709,8 @@
   }
 }
 
-.workspace-page--dark .workspace-settings__list-row--export:hover:not(:disabled) {
+.workspace-page--dark
+  .workspace-settings__list-row--export:hover:not(:disabled) {
   background: rgba(98, 94, 224, 0.12);
 }
 

@@ -8,4 +8,22 @@
       opacity: 1;
     }
   }
+
+  /*
+   * Flex chain: allow tab panels to shrink below content height so overflow-y works.
+   */
+  .default-sidebar .sidebar-tabs-root {
+    min-height: 0;
+  }
+
+  /*
+   * Template editor (uml-template): tab panel is a flex child without its own
+   * scroll region, so long forms (e.g. bar chart) overflow. Match scroll behavior
+   * of other sidebar tabs (e.g. library’s internal list).
+   */
+  .default-sidebar .sidebar-tabs-root [data-testid="uml-template"] {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 }

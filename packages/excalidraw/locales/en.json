@@ -3,6 +3,7 @@
     "paste": "Paste",
     "pasteAsPlaintext": "Paste as plaintext",
     "pasteCharts": "Paste charts",
+    "chartTemplateSidebarPlaceholder": "Chart options will appear here. For now you can edit the sketch directly on canvas.",
     "chartType_bar": "Bar chart",
     "chartType_line": "Line chart",
     "chartType_radar": "Radar chart",
@@ -334,6 +335,7 @@
     "templateLibrary": "Template library",
     "templateInsertedUmlClass": "Inserted UML class diagram ({{preset}})",
     "templateInsertedUmlDiagram": "Inserted UML diagram ({{preset}})",
+    "templateInsertedChartGraphic": "Inserted chart ({{preset}})",
     "convertElementType": "Toggle shape type"
   },
   "mathFormula": {
@@ -788,6 +790,37 @@
     "autoSaveOff": "Off",
     "autoSaveMinutesValue": "{{minutes}} min",
     "autoSaveHint": "How often to save the open Google Drive or local file while you are in the editor. Set to 0 to turn off. Does not run during collaboration."
+  },
+  "barChartTemplate": {
+    "sectionTitle": "Histogram",
+    "chartTitle": "Chart title",
+    "showFrameBorder": "Frame border",
+    "backgroundTransparent": "Transparent",
+    "borderStyle": "Border style",
+    "frameBorder_none": "Hidden",
+    "spacing": "Spacing",
+    "spacingSmall": "Small",
+    "spacingMedium": "Medium",
+    "spacingLarge": "Large",
+    "barWidth": "Bar width",
+    "axisXShort": "X",
+    "axisYShort": "Y",
+    "xArrowStyle": "Horizontal axis arrow",
+    "yArrowStyle": "Vertical axis arrow",
+    "showAxisTicks": "Axis ticks",
+    "fillStyle": "Fill style",
+    "fillStyle_solid": "Solid",
+    "fillStyle_hachure": "Hachure",
+    "fillStyle_crossHatch": "Cross-hatch",
+    "fillStyle_zigzag": "Zigzag",
+    "legend": "Legend",
+    "items": "Bar settings",
+    "addItem": "Add bar",
+    "removeItem": "Remove bar",
+    "itemName": "Name (along baseline)",
+    "itemColor": "Color",
+    "itemHeight": "Relative height",
+    "newItemName": "New bar"
   },
   "fontList": {
     "badge": {

@@ -3,6 +3,7 @@
     "paste": "粘贴",
     "pasteAsPlaintext": "粘贴为纯文本",
     "pasteCharts": "粘贴图表",
+    "chartTemplateSidebarPlaceholder": "图表参数编辑将在此处提供，目前请在画布上直接调整图形。",
     "selectAll": "全部选中",
     "multiSelect": "添加元素到选区",
     "moveCanvas": "移动画布",
@@ -319,6 +320,7 @@
     "templateLibrary": "模板库",
     "templateInsertedUmlClass": "已插入 UML 类图模板（{{preset}}）",
     "templateInsertedUmlDiagram": "已插入 UML 图示模板（{{preset}}）",
+    "templateInsertedChartGraphic": "已插入图表模板（{{preset}}）",
     "convertElementType": "切换形状种类"
   },
   "mathFormula": {
@@ -768,6 +770,37 @@
     "autoSaveOff": "关闭",
     "autoSaveMinutesValue": "{{minutes}} 分钟",
     "autoSaveHint": "在编辑器中打开 Google Drive 或本地工作区文件时，每隔多少分钟自动保存一次。设为 0 表示关闭。协作模式下不会自动保存。"
+  },
+  "barChartTemplate": {
+    "sectionTitle": "直方图",
+    "chartTitle": "图表标题",
+    "showFrameBorder": "外框描边",
+    "backgroundTransparent": "透明",
+    "borderStyle": "边框样式",
+    "frameBorder_none": "隐藏",
+    "spacing": "间距",
+    "spacingSmall": "小",
+    "spacingMedium": "中",
+    "spacingLarge": "大",
+    "barWidth": "柱形宽度",
+    "axisXShort": "横轴",
+    "axisYShort": "纵轴",
+    "xArrowStyle": "横轴箭头",
+    "yArrowStyle": "纵轴箭头",
+    "showAxisTicks": "显示刻度",
+    "fillStyle": "填充样式",
+    "fillStyle_solid": "实心",
+    "fillStyle_hachure": "斜线",
+    "fillStyle_crossHatch": "交叉线",
+    "fillStyle_zigzag": "之字线",
+    "legend": "显示图例",
+    "items": "直方图设置",
+    "addItem": "添加柱形",
+    "removeItem": "删除柱形",
+    "itemName": "名称（沿分类基线）",
+    "itemColor": "颜色",
+    "itemHeight": "相对高度",
+    "newItemName": "新柱形"
   },
   "fontList": {
     "badge": {

@@ -85,11 +85,13 @@
       align-items: center;
       justify-content: center;
       border-radius: 0.625rem;
-      border: 1px solid color-mix(in srgb, var(--color-gray-20) 70%, transparent);
+      border: 1px solid
+        color-mix(in srgb, var(--color-gray-20) 70%, transparent);
       background: color-mix(in srgb, var(--color-surface-low) 88%, transparent);
       color: var(--text-secondary-color);
       cursor: pointer;
-      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+      transition: background 120ms ease, border-color 120ms ease,
+        color 120ms ease;
 
       &:disabled {
         cursor: default;

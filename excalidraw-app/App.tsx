@@ -193,6 +193,7 @@ import {
   type MathFormulaStyle,
 } from "./math/formula";
 import {
+  createChartGraphic,
   createDefaultUmlClassTemplateData,
   createUmlClassTemplate,
   createUmlDiagramTemplate,
@@ -203,10 +204,15 @@ import {
   remapUmlTemplatesOnDuplicate,
   updateUmlClassTemplateInScene,
   updateUmlDiagramTemplateInScene,
+  type BarChartTemplateData,
+  type ChartGraphicPreset,
   type UmlClassTemplateData,
   type UmlClassTemplatePreset,
   type UmlDiagramTemplateData,
   type UmlDiagramTemplatePreset,
+  sanitizeBarChartRootWhenFrameBorderDisabled,
+  sanitizeBarChartTemplateInnerStrokeStyles,
+  updateBarChartTemplateInScene,
 } from "./templates";
 import { EXCALIDRAW_APP_CUSTOM_TOOLBAR_ITEMS } from "./excalidrawCustomToolbar";
 
@@ -640,6 +646,13 @@ const ExcalidrawWrapper = () => {
   >(null);
   const [selectedUmlDiagramData, setSelectedUmlDiagramData] =
     useState<UmlDiagramTemplateData | null>(null);
+  const [selectedChartGraphicRootId, setSelectedChartGraphicRootId] = useState<
+    string | null
+  >(null);
+  const [selectedChartGraphicPreset, setSelectedChartGraphicPreset] =
+    useState<ChartGraphicPreset | null>(null);
+  const [selectedBarChartTemplateData, setSelectedBarChartTemplateData] =
+    useState<BarChartTemplateData | null>(null);
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -689,6 +702,9 @@ const ExcalidrawWrapper = () => {
     setSelectedUmlClassData,
     setSelectedUmlDiagramRootId,
     setSelectedUmlDiagramData,
+    setSelectedChartGraphicRootId,
+    setSelectedChartGraphicPreset,
+    setSelectedBarChartTemplateData,
   });
 
   const { syncEmbeddableToolbarFromSidebar } = useEmbeddableToolbarSync({
@@ -1393,6 +1409,47 @@ const ExcalidrawWrapper = () => {
     [excalidrawAPI],
   );
 
+  const handleInsertChartGraphic = useCallback(
+    (preset: ChartGraphicPreset) => {
+      if (!excalidrawAPI) {
+        throw new Error("Excalidraw editor is not ready yet.");
+      }
+
+      const appState =
+        currentAppStateRef.current || excalidrawAPI.getAppState();
+      const zoom = appState.zoom.value || 1;
+      const sceneCenterX = -appState.scrollX + appState.width / (2 * zoom);
+      const sceneCenterY = -appState.scrollY + appState.height / (2 * zoom);
+      const templateElements = createChartGraphic(
+        sceneCenterX,
+        sceneCenterY,
+        preset,
+        appState,
+      );
+
+      excalidrawAPI.updateScene({
+        elements: [
+          ...excalidrawAPI.getSceneElementsIncludingDeleted(),
+          ...templateElements,
+        ],
+        appState: {
+          selectedElementIds: Object.fromEntries(
+            templateElements.map((element) => [element.id, true]),
+          ),
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+
+      templateLibraryDialogOpenRef.current = false;
+      setIsTemplateLibraryDialogOpen(false);
+      excalidrawAPI.setActiveTool({ type: "selection" });
+      excalidrawAPI.setToast({
+        message: t("toolBar.templateInsertedChartGraphic", { preset }),
+      });
+    },
+    [excalidrawAPI],
+  );
+
   const handleUpdateSelectedUmlClass = useCallback(
     (data: UmlClassTemplateData) => {
       if (!excalidrawAPI || !selectedUmlClassRootId) {
@@ -1443,6 +1500,36 @@ const ExcalidrawWrapper = () => {
     [excalidrawAPI, selectedUmlDiagramRootId],
   );
 
+  const handleUpdateSelectedBarChart = useCallback(
+    (data: BarChartTemplateData) => {
+      if (!excalidrawAPI || !selectedChartGraphicRootId) {
+        return;
+      }
+
+      if (selectedChartGraphicPreset !== "bar-chart") {
+        return;
+      }
+
+      const nextElements = updateBarChartTemplateInScene(
+        excalidrawAPI.getSceneElementsIncludingDeleted(),
+        selectedChartGraphicRootId,
+        data,
+        excalidrawAPI.getAppState(),
+      );
+
+      excalidrawAPI.updateScene({
+        elements: nextElements,
+        appState: {
+          selectedElementIds: {
+            [selectedChartGraphicRootId]: true,
+          },
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [excalidrawAPI, selectedChartGraphicPreset, selectedChartGraphicRootId],
+  );
+
   useEffect(() => {
     if (!excalidrawAPI) {
       return;
@@ -1451,7 +1538,11 @@ const ExcalidrawWrapper = () => {
     const openSidebarName = excalidrawAPI.getAppState().openSidebar?.name;
     const openSidebarTab = excalidrawAPI.getAppState().openSidebar?.tab;
 
-    if (selectedUmlClassRootId || selectedUmlDiagramRootId) {
+    if (
+      selectedUmlClassRootId ||
+      selectedUmlDiagramRootId ||
+      selectedChartGraphicRootId
+    ) {
       // Avoid toggleSidebar({ force: true }) when already on this tab — it always
       // calls setState in the editor and can flood onChange / freeze the page.
       if (openSidebarName === "default" && openSidebarTab === "uml-template") {
@@ -1468,7 +1559,12 @@ const ExcalidrawWrapper = () => {
     if (openSidebarName === "default" && openSidebarTab === "uml-template") {
       void excalidrawAPI.toggleSidebar({ name: null });
     }
-  }, [excalidrawAPI, selectedUmlClassRootId, selectedUmlDiagramRootId]);
+  }, [
+    excalidrawAPI,
+    selectedUmlClassRootId,
+    selectedUmlDiagramRootId,
+    selectedChartGraphicRootId,
+  ]);
 
   useEffect(() => {
     if (isDevEnv()) {
@@ -1734,6 +1830,22 @@ const ExcalidrawWrapper = () => {
   ) => {
     if (collabAPI?.isCollaborating()) {
       collabAPI.syncElements(elements);
+    }
+
+    const barChartInnerSanitized =
+      sanitizeBarChartTemplateInnerStrokeStyles(elements);
+    const barChartRootSanitized = sanitizeBarChartRootWhenFrameBorderDisabled(
+      barChartInnerSanitized.next,
+    );
+    if (
+      (barChartInnerSanitized.didChange || barChartRootSanitized.didChange) &&
+      excalidrawAPI
+    ) {
+      excalidrawAPI.updateScene({
+        elements: barChartRootSanitized.next,
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+      return;
     }
 
     // this check is redundant, but since this is a hot path, it's best
@@ -3192,6 +3304,10 @@ const ExcalidrawWrapper = () => {
           onChangeUmlTemplate={handleUpdateSelectedUmlClass}
           umlDiagramTemplateData={selectedUmlDiagramData}
           onChangeUmlDiagramTemplate={handleUpdateSelectedUmlDiagram}
+          chartGraphicPreset={selectedChartGraphicPreset}
+          barChartTemplateData={selectedBarChartTemplateData}
+          onBarChartTemplateChange={handleUpdateSelectedBarChart}
+          barChartTemplateRootId={selectedChartGraphicRootId}
         />
 
         {mathFormulaDialogState && (
@@ -3209,6 +3325,7 @@ const ExcalidrawWrapper = () => {
             onClose={handleCloseTemplateLibraryDialog}
             onInsertUmlClass={handleInsertUmlClassTemplate}
             onInsertUmlDiagram={handleInsertUmlDiagramTemplate}
+            onInsertChartGraphic={handleInsertChartGraphic}
           />
         )}
 
