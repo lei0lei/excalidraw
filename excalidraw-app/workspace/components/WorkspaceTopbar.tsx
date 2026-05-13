@@ -1,5 +1,6 @@
 import { t } from "@excalidraw/excalidraw/i18n";
 
+import { WorkspaceBackendMenu } from "./WorkspaceBackendMenu";
 import { WorkspaceSettingsMenu } from "./WorkspaceSettingsMenu";
 
 import type { BackendId, WorkspaceErrorState } from "../types";
@@ -71,15 +72,11 @@ export const WorkspaceTopbar = ({
         >
           ←
         </button>
-        <select
-          className="workspace-topbar__select"
-          value={selectedBackend}
-          onChange={(event) => onChangeBackend(event.target.value as BackendId)}
-          aria-label={t("workspace.storageBackend")}
-        >
-          <option value="google-drive">{t("workspace.googleDrive")}</option>
-          <option value="local">{t("workspace.localDirectory")}</option>
-        </select>
+        <WorkspaceBackendMenu
+          theme={theme}
+          selectedBackend={selectedBackend}
+          onChangeBackend={onChangeBackend}
+        />
         <span
           className={`workspace-status-dot workspace-topbar__status-dot ${dotClassName}`}
           title={statusTitle}

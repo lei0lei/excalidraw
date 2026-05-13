@@ -469,19 +469,3 @@
     ),
     linear-gradient(0deg, transparent 49.5%, #9ca3af 50%, transparent 50.5%);
 }
-
-.TemplateLibraryDialog__chartThumb--matrix-2x2 {
-  background-image: linear-gradient(#374151, #374151),
-    linear-gradient(#374151, #374151);
-  background-size: 86px 1px, 1px 58px;
-  background-position: center 52px, 85px center;
-  background-repeat: no-repeat;
-}
-
-.TemplateLibraryDialog__chartThumb--matrix-2x2::after {
-  content: "";
-  position: absolute;
-  inset: 26px 34px 26px 34px;
-  border: 1px dashed rgba(55, 65, 81, 0.55);
-  border-radius: 6px;
-}

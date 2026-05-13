@@ -39,11 +39,6 @@ const CHART_TEMPLATE_CARDS: Array<{
     title: "Pie chart",
     description: "Circle with slice guides (edit as shapes).",
   },
-  {
-    preset: "matrix-2x2",
-    title: "2×2 Matrix",
-    description: "Four-quadrant grid for prioritization.",
-  },
 ];
 
 const UML_TEMPLATE_CARDS: Array<{

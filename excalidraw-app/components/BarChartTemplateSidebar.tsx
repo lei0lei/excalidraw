@@ -155,10 +155,6 @@ export const BarChartTemplateSidebar = ({
   return (
     <div className="BarChartTemplateSidebar">
       <div className="BarChartTemplateSidebar__content">
-        <h3 className="BarChartTemplateSidebar__panelTitle">
-          {t("barChartTemplate.sectionTitle", null, "Histogram")}
-        </h3>
-
         <div className="BarChartTemplateSidebar__inlineField">
           <span className="BarChartTemplateSidebar__inlineLabel">
             {chartTitleLabel}
