@@ -4,7 +4,6 @@ import {
   randomId,
 } from "@excalidraw/common";
 import {
-  isTextElement,
   newArrowElement,
   newElement,
   newElementWith,
@@ -12,17 +11,24 @@ import {
   newTextElement,
 } from "@excalidraw/element";
 
-import type { FillStyle } from "@excalidraw/element/types";
+import type { AppState } from "@excalidraw/excalidraw/types";
 import type {
-  Arrowhead,
   ExcalidrawElement,
+  ExcalidrawLineElement,
   ExcalidrawRectangleElement,
   FontFamilyValues,
   NonDeletedExcalidrawElement,
 } from "@excalidraw/element/types";
 import type { Radians } from "@excalidraw/math";
-import type { AppState } from "@excalidraw/excalidraw/types";
 
+import {
+  BAR_CHART_FRAME_H,
+  BAR_CHART_FRAME_W,
+  buildAxisRenderContext,
+  mergeFrameStrokeWidth,
+  pickBarChartTextFontFamily,
+  plotMetrics,
+} from "./bar-chart-template";
 import {
   buildChartGraphicRootCustomData,
   CHART_GRAPHIC_TEMPLATE_TYPE,
@@ -31,83 +37,52 @@ import {
   type ChartGraphicTemplateCustomDataRoot,
 } from "./chart-graphic-metadata";
 
-import type { BarChartItemData, BarChartTemplateData } from "./bar-chart-types";
+import type {
+  LineChartItemData,
+  LineChartTemplateData,
+} from "./line-chart-types";
 
-/** Outer frame dimensions for the bar chart template widget. */
-export const BAR_CHART_FRAME_W = 400;
-export const BAR_CHART_FRAME_H = 280;
-
-const LEFT_PAD = 72;
-const TOP_PAD = 52;
-const BOTTOM_AXIS_PAD = 30;
-const RIGHT_PAD = 16;
-const LEGEND_WIDTH = 86;
+const DEFAULT_INSERT_FRAME_STROKE = "#374151";
+const DEFAULT_FRAME_STROKE_WIDTH = 1.5;
+const DEFAULT_SERIES_STROKE = "#6366f1";
+const SERIES_STROKE_WIDTH = 2.75;
+const INNER_CHART_STROKE_STYLE = "solid" as const;
 const CATEGORY_ROW = 40;
-
-/** Prefer an existing chart text’s font; then the editor’s current default; then app default. */
-export const pickBarChartTextFontFamily = (
-  elements: readonly ExcalidrawElement[],
-  rootId: string,
-  groupId: string,
-  appState: AppState | null | undefined,
-): FontFamilyValues => {
-  for (const el of elements) {
-    if (el.isDeleted || el.id === rootId) {
-      continue;
-    }
-    if (!el.groupIds?.includes(groupId)) {
-      continue;
-    }
-    if (isTextElement(el)) {
-      return el.fontFamily;
-    }
-  }
-  return appState?.currentItemFontFamily ?? DEFAULT_FONT_FAMILY;
-};
-
-export const BAR_CHART_DEFAULT_COLORS = [
-  "#6366f1",
-  "#8b5cf6",
-  "#ec4899",
-  "#14b8a6",
-  "#f59e0b",
-  "#eab308",
-  "#84cc16",
-  "#06b6d4",
-];
+const TICK = 6;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-const wrapFillStyle = (value: unknown): FillStyle =>
-  value === "hachure" ||
-  value === "cross-hatch" ||
-  value === "solid" ||
-  value === "zigzag"
-    ? value
-    : "solid";
+const textRoughnessFor = (roughness: number) =>
+  roughness <= 1 ? roughness : 1;
 
-export const createDefaultBarChartTemplateData = (): BarChartTemplateData => {
-  const heightPattern = [0.35, 0.62, 0.28, 0.72, 0.45];
+const lineChildData = (
+  rootId: string,
+): ChartGraphicTemplateCustomDataChild => ({
+  templateType: CHART_GRAPHIC_TEMPLATE_TYPE,
+  templateVersion: CHART_GRAPHIC_TEMPLATE_VERSION,
+  templateRole: "child",
+  templateRootId: rootId,
+});
 
-  const items = heightPattern.map((value, index) =>
-    normalizeBarChartItem(
-      {
-        id: randomId(),
-        label: `Item ${index + 1}`,
-        backgroundColor:
-          BAR_CHART_DEFAULT_COLORS[index % BAR_CHART_DEFAULT_COLORS.length]!,
-        strokeColor:
-          BAR_CHART_DEFAULT_COLORS[index % BAR_CHART_DEFAULT_COLORS.length]!,
-        value,
-        fillStyle: "hachure",
-      },
-      "hachure",
-    ),
+const seriesChildData = (
+  rootId: string,
+): ChartGraphicTemplateCustomDataChild => ({
+  ...lineChildData(rootId),
+  lineChartPart: "series",
+});
+
+export const createDefaultLineChartTemplateData = (): LineChartTemplateData => {
+  const values = [0.75, 0.45, 0.55, 0.25, 0.4, 0.3];
+  const items = values.map((value, index) =>
+    normalizeLineChartItem({
+      id: randomId(),
+      label: `Point ${index + 1}`,
+      value,
+    }),
   );
-
   return {
-    title: "Histogram",
+    title: "Line chart",
     frameBorderEnabled: false,
     xAxisLabel: "X",
     yAxisLabel: "Y",
@@ -117,53 +92,27 @@ export const createDefaultBarChartTemplateData = (): BarChartTemplateData => {
   };
 };
 
-export const normalizeBarChartItem = (
-  input: Partial<BarChartItemData>,
-  fallbackFill: FillStyle,
-): BarChartItemData => ({
+export const normalizeLineChartItem = (
+  input: Partial<LineChartItemData>,
+): LineChartItemData => ({
   id: typeof input.id === "string" && input.id.trim() ? input.id : randomId(),
   label: typeof input.label === "string" ? input.label : "",
-  backgroundColor:
-    typeof input.backgroundColor === "string" && input.backgroundColor
-      ? input.backgroundColor
-      : BAR_CHART_DEFAULT_COLORS[0]!,
-  strokeColor:
-    typeof input.strokeColor === "string" && input.strokeColor
-      ? input.strokeColor
-      : BAR_CHART_DEFAULT_COLORS[0]!,
   value: clamp(
     typeof input.value === "number" && Number.isFinite(input.value)
       ? input.value
-      : 0.35,
+      : 0.5,
     0,
     1,
   ),
-  fillStyle: wrapFillStyle(input.fillStyle ?? fallbackFill),
 });
 
-type LegacyBarFields = {
-  fillStyle?: FillStyle;
-  coversCanvas?: boolean;
-  frameBorderVisible?: boolean;
-  barSpacing?: number;
-  showXAxisArrow?: boolean;
-  showYAxisArrow?: boolean;
-};
-
-export const normalizeBarChartTemplateData = (
-  data: (Partial<BarChartTemplateData> & LegacyBarFields) | undefined | null,
-): BarChartTemplateData => {
-  const defaults = createDefaultBarChartTemplateData();
-  const legacyItemFill = wrapFillStyle(
-    (data as { fillStyle?: FillStyle } | null)?.fillStyle ?? "hachure",
-  );
-  const legacy = data as LegacyBarFields | null;
-
+export const normalizeLineChartTemplateData = (
+  data: Partial<LineChartTemplateData> | undefined | null,
+): LineChartTemplateData => {
+  const defaults = createDefaultLineChartTemplateData();
   let items =
     Array.isArray(data?.items) && data.items.length
-      ? data.items.map((item) =>
-          normalizeBarChartItem(item ?? {}, legacyItemFill),
-        )
+      ? data.items.map((item) => normalizeLineChartItem(item ?? {}))
       : defaults.items.slice();
 
   if (items.length > 40) {
@@ -173,188 +122,41 @@ export const normalizeBarChartTemplateData = (
     items = defaults.items.slice(0, 1);
   }
 
-  const title = typeof data?.title === "string" ? data.title : defaults.title;
-
-  let frameBorderEnabled: boolean;
-  if (typeof data?.frameBorderEnabled === "boolean") {
-    frameBorderEnabled = data.frameBorderEnabled;
-  } else if (
-    data &&
-    "frameStrokeStyle" in data &&
-    (data as { frameStrokeStyle?: string }).frameStrokeStyle === "none"
-  ) {
-    frameBorderEnabled = false;
-  } else if (typeof legacy?.frameBorderVisible === "boolean") {
-    frameBorderEnabled = legacy.frameBorderVisible;
-  } else {
-    frameBorderEnabled = defaults.frameBorderEnabled;
-  }
-
-  const xAxisLabel =
-    typeof data?.xAxisLabel === "string"
-      ? data.xAxisLabel
-      : defaults.xAxisLabel;
-  const yAxisLabel =
-    typeof data?.yAxisLabel === "string"
-      ? data?.yAxisLabel
-      : defaults.yAxisLabel;
-
-  const showAxisTicks =
-    typeof data?.showAxisTicks === "boolean"
-      ? data.showAxisTicks
-      : defaults.showAxisTicks;
-  const legendVisible =
-    typeof data?.legendVisible === "boolean"
-      ? data.legendVisible
-      : defaults.legendVisible;
-
   return {
-    title,
-    frameBorderEnabled,
-    xAxisLabel,
-    yAxisLabel,
-    showAxisTicks,
-    legendVisible,
+    title: typeof data?.title === "string" ? data.title : defaults.title,
+    frameBorderEnabled:
+      typeof data?.frameBorderEnabled === "boolean"
+        ? data.frameBorderEnabled
+        : defaults.frameBorderEnabled,
+    xAxisLabel:
+      typeof data?.xAxisLabel === "string"
+        ? data.xAxisLabel
+        : defaults.xAxisLabel,
+    yAxisLabel:
+      typeof data?.yAxisLabel === "string"
+        ? data.yAxisLabel
+        : defaults.yAxisLabel,
+    showAxisTicks:
+      typeof data?.showAxisTicks === "boolean"
+        ? data.showAxisTicks
+        : defaults.showAxisTicks,
+    legendVisible:
+      typeof data?.legendVisible === "boolean"
+        ? data.legendVisible
+        : defaults.legendVisible,
     items,
   };
 };
 
-const childCustomData = (
-  rootId: string,
-): ChartGraphicTemplateCustomDataChild => ({
-  templateType: CHART_GRAPHIC_TEMPLATE_TYPE,
-  templateVersion: CHART_GRAPHIC_TEMPLATE_VERSION,
-  templateRole: "child",
-  templateRootId: rootId,
-});
-
-const textRoughnessFor = (roughness: number) =>
-  roughness <= 1 ? roughness : 1;
-
-export const plotMetrics = (
-  frameX: number,
-  frameY: number,
-  legendVisible: boolean,
-) => {
-  const legendSlot = legendVisible ? LEGEND_WIDTH : 0;
-  const bx0 = frameX + LEFT_PAD;
-  const by0 = frameY + TOP_PAD;
-  const plotW =
-    BAR_CHART_FRAME_W -
-    LEFT_PAD -
-    RIGHT_PAD -
-    legendSlot -
-    (legendVisible ? 6 : 0);
-  const plotH =
-    BAR_CHART_FRAME_H -
-    TOP_PAD -
-    BOTTOM_AXIS_PAD -
-    CATEGORY_ROW -
-    (legendVisible ? 6 : 0);
-
-  const legendLeft = bx0 + plotW + (legendVisible ? 18 : 0);
-  const legendTop = frameY + TOP_PAD;
-
-  return { bx0, by0, plotW, plotH, legendLeft, legendTop };
-};
-
-const measureBarLayouts = (
-  items: readonly BarChartItemData[],
-  plotW: number,
-): { gap: number; barW: number } => {
-  /** Fixed layout curve equivalent to former medium spacing / default bar width sliders. */
-  const barSpacing = 50;
-  const barWidth = 50;
-  const n = Math.max(1, items.length);
-  const tGap = clamp(barSpacing, 0, 100) / 100;
-  const tW = clamp(barWidth, 0, 100) / 100;
-
-  const slot = plotW / n;
-  const gapMin = clamp(slot * 0.04, 2, 14);
-  const gapMax = clamp(slot * 0.48, 10, Math.min(56, slot * 0.92));
-  let gap = gapMin + (gapMax - gapMin) * tGap;
-
-  let maxBarW = (plotW - gap * (n + 1)) / n;
-  if (maxBarW < 4) {
-    gap = Math.max(2, (plotW - 4 * n) / (n + 1));
-    maxBarW = (plotW - gap * (n + 1)) / n;
-    maxBarW = Math.max(4, maxBarW);
-  } else {
-    maxBarW = Math.max(4, maxBarW);
-  }
-
-  const wLo = Math.max(4, maxBarW * 0.2);
-  const wHi = maxBarW;
-  let barW = wLo + (wHi - wLo) * tW;
-
-  const total = gap * (n + 1) + barW * n;
-  if (total > plotW) {
-    barW = Math.max(4, (plotW - gap * (n + 1)) / n);
-  }
-
-  return { gap, barW };
-};
-
-const DEFAULT_INSERT_FRAME_STROKE = "#374151";
-const DEFAULT_FRAME_STROKE_WIDTH = 1.5;
-const DEFAULT_INSERT_ROUGHNESS = 2;
-
-export const mergeFrameStrokeWidth = (
-  prevWidth: number,
-  frameBorderEnabled: boolean,
-): number => {
-  if (!frameBorderEnabled) {
-    return 0;
-  }
-  if (prevWidth <= 0) {
-    return DEFAULT_FRAME_STROKE_WIDTH;
-  }
-  return prevWidth;
-};
-
-export type BarChartAxisRenderContext = {
-  rootRoughness: number;
-  axisStrokeColor: string;
-  /** Fixed default arrowhead on both axes (not tied to the main sidebar arrow tool). */
-  axisArrowhead: Arrowhead;
-};
-
-/** Default axis arrowhead; matches Excalidraw’s typical arrow appearance. */
-const DEFAULT_AXIS_ARROWHEAD: Arrowhead = "arrow";
-
-export function buildAxisRenderContext(params: {
-  root: ExcalidrawElement | null | undefined;
-}): BarChartAxisRenderContext {
-  const r = params.root;
-  if (r && r.type === "rectangle" && !r.isDeleted) {
-    const rect = r as ExcalidrawRectangleElement;
-    const axisStrokeColor = isTransparent(rect.strokeColor)
-      ? DEFAULT_INSERT_FRAME_STROKE
-      : rect.strokeColor;
-    return {
-      rootRoughness: rect.roughness,
-      axisStrokeColor,
-      axisArrowhead: DEFAULT_AXIS_ARROWHEAD,
-    };
-  }
-  return {
-    rootRoughness: DEFAULT_INSERT_ROUGHNESS,
-    axisStrokeColor: DEFAULT_INSERT_FRAME_STROKE,
-    axisArrowhead: DEFAULT_AXIS_ARROWHEAD,
-  };
-}
-
-/** Histogram internals always use solid strokes; frame stroke style is only on the root rectangle (left sidebar). */
-const INNER_CHART_STROKE_STYLE = "solid" as const;
-
-const buildBarChartChildElementsUnsafe = (
+const buildLineChartChildElementsUnsafe = (
   frameX: number,
   frameY: number,
   groupIds: readonly string[],
-  normalized: BarChartTemplateData,
-  axisCtx: BarChartAxisRenderContext,
+  normalized: LineChartTemplateData,
+  axisCtx: ReturnType<typeof buildAxisRenderContext>,
   textFontFamily: FontFamilyValues,
   frameId: string | null,
+  seriesStroke: string,
 ): NonDeletedExcalidrawElement[] => {
   const els: NonDeletedExcalidrawElement[] = [];
   const childFrameId = frameId;
@@ -368,7 +170,6 @@ const buildBarChartChildElementsUnsafe = (
   const axisInk = axisCtx.axisStrokeColor;
   const axisHead = axisCtx.axisArrowhead;
   const titleInk = "#111827";
-  const TICK = 6;
 
   els.push(
     newTextElement({
@@ -386,8 +187,39 @@ const buildBarChartChildElementsUnsafe = (
     }),
   );
 
-  const { gap, barW } = measureBarLayouts(normalized.items, plotW);
   const n = normalized.items.length;
+  const xFrac = (i: number) => (n <= 1 ? 0.5 : i / (n - 1));
+  /** Plot-local offsets from (bx0, by0); used for markers / labels. */
+  const pts: [number, number][] = normalized.items.map((it, i) => {
+    const tx = xFrac(i) * plotW;
+    const ty = (1 - clamp(it.value, 0, 1)) * plotH;
+    return [tx, ty];
+  });
+
+  /** Excalidraw linear elements expect points[0] === [0,0] and width/height = point AABB. */
+  let linePlotPts = pts;
+  if (linePlotPts.length === 1) {
+    const p = linePlotPts[0]!;
+    linePlotPts = [p, [p[0] + 1e-6, p[1]]];
+  }
+  const originX = linePlotPts[0]![0];
+  const originY = linePlotPts[0]![1];
+  const normLinePts: [number, number][] = linePlotPts.map(([px, py]) => [
+    px - originX,
+    py - originY,
+  ]);
+  let minNX = 0;
+  let minNY = 0;
+  let maxNX = 0;
+  let maxNY = 0;
+  for (const [px, py] of normLinePts) {
+    minNX = Math.min(minNX, px);
+    minNY = Math.min(minNY, py);
+    maxNX = Math.max(maxNX, px);
+    maxNY = Math.max(maxNY, py);
+  }
+  const lineW = Math.max(maxNX - minNX, 1e-6);
+  const lineH = Math.max(maxNY - minNY, 1e-6);
 
   if (normalized.showAxisTicks) {
     const yLevels = [0, 0.25, 0.5, 0.75, 1];
@@ -430,7 +262,7 @@ const buildBarChartChildElementsUnsafe = (
       );
     }
     for (let i = 0; i < n; i++) {
-      const cx = bx0 + gap + i * (barW + gap) + barW / 2;
+      const cx = bx0 + xFrac(i) * plotW;
       els.push(
         newLinearElement({
           type: "line",
@@ -541,25 +373,39 @@ const buildBarChartChildElementsUnsafe = (
     );
   }
 
+  els.push(
+    newLinearElement({
+      type: "line",
+      x: bx0 + originX,
+      y: by0 + originY,
+      width: lineW,
+      height: lineH,
+      points: normLinePts as any,
+      strokeColor: seriesStroke,
+      strokeWidth: SERIES_STROKE_WIDTH,
+      strokeStyle: INNER_CHART_STROKE_STYLE,
+      roughness: 0,
+      roundness: null,
+      frameId: childFrameId,
+      groupIds: [...groupIds],
+    }),
+  );
+
   for (let i = 0; i < n; i++) {
-    const item = normalized.items[i]!;
-    const barH = Math.max(4, plotH * clamp(item.value, 0.02, 1));
-    const x = bx0 + gap + i * (barW + gap);
-    const barY = by0 + plotH - barH;
+    const [px, py] = pts[i]!;
     els.push(
       newElement({
-        type: "rectangle",
-        x,
-        y: barY,
-        width: barW,
-        height: barH,
-        strokeColor: item.strokeColor,
-        backgroundColor: item.backgroundColor,
-        fillStyle: item.fillStyle,
+        type: "ellipse",
+        x: bx0 + px - 4,
+        y: by0 + py - 4,
+        width: 8,
+        height: 8,
+        strokeColor: seriesStroke,
+        backgroundColor: "#ffffff",
+        fillStyle: "solid",
         strokeStyle: INNER_CHART_STROKE_STYLE,
-        strokeWidth: 1,
-        roughness,
-        roundness: { type: 3, value: 6 },
+        strokeWidth: 1.5,
+        roughness: 0,
         frameId: childFrameId,
         groupIds: [...groupIds],
       }),
@@ -568,15 +414,12 @@ const buildBarChartChildElementsUnsafe = (
 
   for (let i = 0; i < n; i++) {
     const item = normalized.items[i]!;
-    const cx = bx0 + gap + i * (barW + gap) + barW / 2;
-    const barH = Math.max(4, plotH * clamp(item.value, 0.02, 1));
-    const barY = by0 + plotH - barH;
-    const pct = `${Math.round(item.value * 100)}%`;
-    const valY = barY - 4;
+    const [px, py] = pts[i]!;
+    const pct = `${Math.round(item.value * 100)}`;
     els.push(
       newTextElement({
-        x: cx,
-        y: valY,
+        x: bx0 + px,
+        y: by0 + py - 14,
         text: pct,
         originalText: pct,
         fontSize: 11,
@@ -593,7 +436,7 @@ const buildBarChartChildElementsUnsafe = (
 
   for (let i = 0; i < n; i++) {
     const item = normalized.items[i]!;
-    const cx = bx0 + gap + i * (barW + gap) + barW / 2;
+    const cx = bx0 + xFrac(i) * plotW;
     els.push(
       newTextElement({
         x: cx,
@@ -630,7 +473,7 @@ const buildBarChartChildElementsUnsafe = (
   els.push(
     newTextElement({
       x: frameX + 22,
-      y: frameY + TOP_PAD + plotH / 2,
+      y: frameY + 52 + plotH / 2,
       text: normalized.yAxisLabel,
       originalText: normalized.yAxisLabel,
       fontSize: 12,
@@ -649,26 +492,25 @@ const buildBarChartChildElementsUnsafe = (
     for (const item of normalized.items) {
       els.push(
         newElement({
-          type: "rectangle",
+          type: "ellipse",
           x: legendLeft,
           y: ly,
-          width: 12,
-          height: 12,
-          strokeColor: item.strokeColor,
-          backgroundColor: item.backgroundColor,
-          fillStyle: item.fillStyle,
+          width: 10,
+          height: 10,
+          strokeColor: seriesStroke,
+          backgroundColor: seriesStroke,
+          fillStyle: "solid",
           strokeStyle: INNER_CHART_STROKE_STYLE,
           strokeWidth: 1,
-          roughness,
-          roundness: { type: 3, value: 2 },
+          roughness: 0,
           frameId: childFrameId,
           groupIds: [...groupIds],
         }),
       );
       els.push(
         newTextElement({
-          x: legendLeft + 18,
-          y: ly + 6,
+          x: legendLeft + 16,
+          y: ly + 5,
           text: item.label,
           originalText: item.label,
           fontSize: 12,
@@ -688,18 +530,19 @@ const buildBarChartChildElementsUnsafe = (
   return els;
 };
 
-export function buildBarChartTaggedChildren(params: {
+export function buildLineChartTaggedChildren(params: {
   frameX: number;
   frameY: number;
   groupIds: readonly string[];
   rootId: string;
-  data: BarChartTemplateData;
-  axisCtx: BarChartAxisRenderContext;
+  data: LineChartTemplateData;
+  axisCtx: ReturnType<typeof buildAxisRenderContext>;
   textFontFamily: FontFamilyValues;
   frameId: string | null;
+  seriesStroke: string;
 }): NonDeletedExcalidrawElement[] {
-  const normalized = normalizeBarChartTemplateData(params.data);
-  const raw = buildBarChartChildElementsUnsafe(
+  const normalized = normalizeLineChartTemplateData(params.data);
+  const raw = buildLineChartChildElementsUnsafe(
     params.frameX,
     params.frameY,
     params.groupIds,
@@ -707,20 +550,28 @@ export function buildBarChartTaggedChildren(params: {
     params.axisCtx,
     params.textFontFamily,
     params.frameId,
+    params.seriesStroke,
   );
-  return raw.map((el) =>
-    newElementWith(el, { customData: childCustomData(params.rootId) }),
-  );
+  return raw.map((el) => {
+    const isSeries =
+      el.type === "line" &&
+      "strokeWidth" in el &&
+      (el as ExcalidrawLineElement).strokeWidth === SERIES_STROKE_WIDTH;
+    const cd = isSeries
+      ? seriesChildData(params.rootId)
+      : lineChildData(params.rootId);
+    return newElementWith(el, { customData: cd });
+  });
 }
 
-export const buildInitialBarChartElements = (params: {
+export const buildInitialLineChartElements = (params: {
   frameX: number;
   frameY: number;
   groupIds: string[];
-  data: BarChartTemplateData;
+  data: LineChartTemplateData;
   appState?: AppState | null;
 }): NonDeletedExcalidrawElement[] => {
-  const normalized = normalizeBarChartTemplateData(params.data);
+  const normalized = normalizeLineChartTemplateData(params.data);
   const textFontFamily =
     params.appState?.currentItemFontFamily ?? DEFAULT_FONT_FAMILY;
   const strokeW = mergeFrameStrokeWidth(
@@ -742,16 +593,13 @@ export const buildInitialBarChartElements = (params: {
     backgroundColor: "transparent",
     fillStyle: "solid",
     roundness: { type: 3, value: 12 },
-    /** Architect / “整齐” sloppiness for new charts (matches main toolbar default style). */
     roughness: 0,
     groupIds: params.groupIds,
   });
 
   const rootId = frame.id;
-  const axisCtx = buildAxisRenderContext({
-    root: frame,
-  });
-  const children = buildBarChartTaggedChildren({
+  const axisCtx = buildAxisRenderContext({ root: frame });
+  const children = buildLineChartTaggedChildren({
     frameX: params.frameX,
     frameY: params.frameY,
     groupIds: params.groupIds,
@@ -760,18 +608,19 @@ export const buildInitialBarChartElements = (params: {
     axisCtx,
     textFontFamily,
     frameId: frame.frameId ?? null,
+    seriesStroke: DEFAULT_SERIES_STROKE,
   });
 
   return [frame, ...children];
 };
 
-export function readBarChartTemplateDataFromRoot(
+export function readLineChartTemplateDataFromRoot(
   root: {
     readonly id: string;
     isDeleted?: boolean;
     customData?: unknown;
   } | null,
-): BarChartTemplateData | null {
+): LineChartTemplateData | null {
   if (!root || root.isDeleted) {
     return null;
   }
@@ -780,25 +629,24 @@ export function readBarChartTemplateDataFromRoot(
     !cd ||
     cd.templateType !== CHART_GRAPHIC_TEMPLATE_TYPE ||
     cd.templateRole !== "root" ||
-    cd.chartPreset !== "bar-chart"
+    cd.chartPreset !== "line-chart"
   ) {
     return null;
   }
-  const raw = cd.barChartTemplateData;
-
+  const raw = cd.lineChartTemplateData;
   if (raw) {
-    return normalizeBarChartTemplateData(raw);
+    return normalizeLineChartTemplateData(raw);
   }
-  return normalizeBarChartTemplateData(createDefaultBarChartTemplateData());
+  return normalizeLineChartTemplateData(createDefaultLineChartTemplateData());
 }
 
-export const serializeBarChartTemplateDataForSync = (
-  data: BarChartTemplateData | null,
+export const serializeLineChartTemplateDataForSync = (
+  data: LineChartTemplateData | null,
 ): string => {
   if (!data) {
     return "";
   }
-  const n = normalizeBarChartTemplateData(data);
+  const n = normalizeLineChartTemplateData(data);
   return [
     n.title,
     n.frameBorderEnabled ? "1" : "0",
@@ -806,29 +654,50 @@ export const serializeBarChartTemplateDataForSync = (
     n.yAxisLabel,
     n.showAxisTicks ? "1" : "0",
     n.legendVisible ? "1" : "0",
-    n.items
-      .map(
-        (it) =>
-          `${it.id}~${it.label}~${it.backgroundColor}~${it.strokeColor}~${it.value}~${it.fillStyle}`,
-      )
-      .join("|"),
+    n.items.map((it) => `${it.id}~${it.label}~${it.value}`).join("|"),
   ].join("##");
 };
 
-export const areBarChartTemplateDataEqual = (
-  left: BarChartTemplateData | null,
-  right: BarChartTemplateData | null,
+export const areLineChartTemplateDataEqual = (
+  left: LineChartTemplateData | null,
+  right: LineChartTemplateData | null,
 ) =>
-  serializeBarChartTemplateDataForSync(left) ===
-  serializeBarChartTemplateDataForSync(right);
+  serializeLineChartTemplateDataForSync(left) ===
+  serializeLineChartTemplateDataForSync(right);
 
-export function updateBarChartTemplateInScene(
+const pickSeriesStrokeFromScene = (
   elements: readonly ExcalidrawElement[],
   rootId: string,
-  data: BarChartTemplateData,
+  groupId: string,
+): string => {
+  for (const el of elements) {
+    if (el.isDeleted || el.id === rootId) {
+      continue;
+    }
+    if (!el.groupIds?.includes(groupId)) {
+      continue;
+    }
+    const cd = el.customData as ChartGraphicTemplateCustomDataChild | undefined;
+    if (
+      cd?.templateType === CHART_GRAPHIC_TEMPLATE_TYPE &&
+      cd.templateRole === "child" &&
+      cd.lineChartPart === "series" &&
+      el.type === "line" &&
+      "strokeColor" in el
+    ) {
+      return (el as ExcalidrawLineElement).strokeColor;
+    }
+  }
+  return DEFAULT_SERIES_STROKE;
+};
+
+export function updateLineChartTemplateInScene(
+  elements: readonly ExcalidrawElement[],
+  rootId: string,
+  data: LineChartTemplateData,
   appState: AppState | null,
 ): ExcalidrawElement[] {
-  const normalized = normalizeBarChartTemplateData(data);
+  const normalized = normalizeLineChartTemplateData(data);
   const root = elements.find((e) => e.id === rootId);
   if (!root || root.isDeleted) {
     return [...elements];
@@ -853,7 +722,7 @@ export function updateBarChartTemplateInScene(
   const prevCd = root.customData as
     | ChartGraphicTemplateCustomDataRoot
     | undefined;
-  let strokeColorCache = prevCd?.barChartFrameStrokeColorCache;
+  let strokeColorCache = prevCd?.lineChartFrameStrokeColorCache;
 
   const prevRect = root as ExcalidrawRectangleElement;
 
@@ -880,6 +749,8 @@ export function updateBarChartTemplateInScene(
       : root;
   const axisCtx = buildAxisRenderContext({ root: axisRoot });
 
+  const seriesStroke = pickSeriesStrokeFromScene(elements, rootId, gid);
+
   const nextRoot = newElementWith(
     root,
     {
@@ -889,15 +760,15 @@ export function updateBarChartTemplateInScene(
       strokeWidth: nextStrokeWidth,
       customData: buildChartGraphicRootCustomData({
         rootId: root.id,
-        preset: "bar-chart",
-        barChartTemplateData: normalized,
-        barChartFrameStrokeColorCache: strokeColorCache ?? null,
+        preset: "line-chart",
+        lineChartTemplateData: normalized,
+        lineChartFrameStrokeColorCache: strokeColorCache ?? null,
       }),
     },
     true,
   );
 
-  const children = buildBarChartTaggedChildren({
+  const children = buildLineChartTaggedChildren({
     frameX: nextRoot.x,
     frameY: nextRoot.y,
     groupIds: nextRoot.groupIds,
@@ -906,6 +777,7 @@ export function updateBarChartTemplateInScene(
     axisCtx,
     textFontFamily,
     frameId: nextRoot.frameId ?? null,
+    seriesStroke,
   });
 
   const ri = withoutChildren.findIndex((e) => e.id === rootId);

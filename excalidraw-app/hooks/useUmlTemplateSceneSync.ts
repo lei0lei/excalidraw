@@ -5,9 +5,17 @@ import type { AppState } from "@excalidraw/excalidraw/types";
 
 import {
   areBarChartTemplateDataEqual,
+  areLineChartTemplateDataEqual,
+  arePieChartTemplateDataEqual,
   readBarChartTemplateDataFromRoot,
+  readLineChartTemplateDataFromRoot,
+  readPieChartTemplateDataFromRoot,
   serializeBarChartTemplateDataForSync,
+  serializeLineChartTemplateDataForSync,
+  serializePieChartTemplateDataForSync,
   type BarChartTemplateData,
+  type LineChartTemplateData,
+  type PieChartTemplateData,
   getChartGraphicPresetFromElement,
   getUmlClassTemplateData,
   getUmlDiagramTemplateData,
@@ -107,6 +115,10 @@ export type UmlTemplateSceneSyncParams = {
   setSelectedChartGraphicRootId: (id: string | null) => void;
   setSelectedChartGraphicPreset: (preset: ChartGraphicPreset | null) => void;
   setSelectedBarChartTemplateData: (data: BarChartTemplateData | null) => void;
+  setSelectedLineChartTemplateData: (
+    data: LineChartTemplateData | null,
+  ) => void;
+  setSelectedPieChartTemplateData: (data: PieChartTemplateData | null) => void;
 };
 
 /**
@@ -128,6 +140,8 @@ export function useUmlTemplateSceneSync({
   setSelectedChartGraphicRootId,
   setSelectedChartGraphicPreset,
   setSelectedBarChartTemplateData,
+  setSelectedLineChartTemplateData,
+  setSelectedPieChartTemplateData,
 }: UmlTemplateSceneSyncParams) {
   const selectedUmlClassRootIdRef = useRef<string | null>(null);
   const selectedUmlClassDataRef = useRef<UmlClassTemplateData | null>(null);
@@ -139,6 +153,12 @@ export function useUmlTemplateSceneSync({
   const selectedChartGraphicPresetRef = useRef<ChartGraphicPreset | null>(null);
   const chartGraphicSelectionSignatureRef = useRef("");
   const selectedBarChartTemplateDataRef = useRef<BarChartTemplateData | null>(
+    null,
+  );
+  const selectedLineChartTemplateDataRef = useRef<LineChartTemplateData | null>(
+    null,
+  );
+  const selectedPieChartTemplateDataRef = useRef<PieChartTemplateData | null>(
     null,
   );
 
@@ -284,9 +304,21 @@ export function useUmlTemplateSceneSync({
           nextChartPreset === "bar-chart" && selectedChartGraphicRoot
             ? readBarChartTemplateDataFromRoot(selectedChartGraphicRoot)
             : null;
+        const nextLineData =
+          nextChartPreset === "line-chart" && selectedChartGraphicRoot
+            ? readLineChartTemplateDataFromRoot(selectedChartGraphicRoot)
+            : null;
+        const nextPieData =
+          nextChartPreset === "pie-chart" && selectedChartGraphicRoot
+            ? readPieChartTemplateDataFromRoot(selectedChartGraphicRoot)
+            : null;
         const chartSubSignature =
           nextChartPreset === "bar-chart"
             ? serializeBarChartTemplateDataForSync(nextBarData)
+            : nextChartPreset === "line-chart"
+            ? serializeLineChartTemplateDataForSync(nextLineData)
+            : nextChartPreset === "pie-chart"
+            ? serializePieChartTemplateDataForSync(nextPieData)
             : "";
         const nextChartGraphicSelectionSignature = buildUmlSelectionSignature(
           selectedElementIdsSignature,
@@ -310,6 +342,14 @@ export function useUmlTemplateSceneSync({
             selectedBarChartTemplateDataRef.current,
             nextBarData,
           );
+          const lineDataChanged = !areLineChartTemplateDataEqual(
+            selectedLineChartTemplateDataRef.current,
+            nextLineData,
+          );
+          const pieDataChanged = !arePieChartTemplateDataEqual(
+            selectedPieChartTemplateDataRef.current,
+            nextPieData,
+          );
 
           if (chartRootChanged) {
             selectedChartGraphicRootIdRef.current =
@@ -321,11 +361,25 @@ export function useUmlTemplateSceneSync({
           if (barDataChanged) {
             selectedBarChartTemplateDataRef.current = nextBarData;
           }
+          if (lineDataChanged) {
+            selectedLineChartTemplateDataRef.current = nextLineData;
+          }
+          if (pieDataChanged) {
+            selectedPieChartTemplateDataRef.current = nextPieData;
+          }
 
-          if (chartRootChanged || chartPresetChanged || barDataChanged) {
+          if (
+            chartRootChanged ||
+            chartPresetChanged ||
+            barDataChanged ||
+            lineDataChanged ||
+            pieDataChanged
+          ) {
             const nextChartRoot = nextSelectedChartGraphicRootId;
             const nextPreset = nextChartPreset;
             const nextBar = nextBarData;
+            const nextLine = nextLineData;
+            const nextPie = nextPieData;
             queueMicrotask(() => {
               if (chartRootChanged) {
                 setSelectedChartGraphicRootId(nextChartRoot);
@@ -335,6 +389,12 @@ export function useUmlTemplateSceneSync({
               }
               if (barDataChanged) {
                 setSelectedBarChartTemplateData(nextBar);
+              }
+              if (lineDataChanged) {
+                setSelectedLineChartTemplateData(nextLine);
+              }
+              if (pieDataChanged) {
+                setSelectedPieChartTemplateData(nextPie);
               }
             });
           }
@@ -372,6 +432,14 @@ export function useUmlTemplateSceneSync({
           selectedBarChartTemplateDataRef.current = null;
           setSelectedBarChartTemplateData(null);
         }
+        if (selectedLineChartTemplateDataRef.current !== null) {
+          selectedLineChartTemplateDataRef.current = null;
+          setSelectedLineChartTemplateData(null);
+        }
+        if (selectedPieChartTemplateDataRef.current !== null) {
+          selectedPieChartTemplateDataRef.current = null;
+          setSelectedPieChartTemplateData(null);
+        }
       }
     },
     [
@@ -382,6 +450,8 @@ export function useUmlTemplateSceneSync({
       setSelectedChartGraphicRootId,
       setSelectedChartGraphicPreset,
       setSelectedBarChartTemplateData,
+      setSelectedLineChartTemplateData,
+      setSelectedPieChartTemplateData,
     ],
   );
 

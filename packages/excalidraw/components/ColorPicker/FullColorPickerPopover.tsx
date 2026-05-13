@@ -10,7 +10,7 @@ import {
   saveCaretPosition,
   restoreCaretPosition,
 } from "../../hooks/useTextEditorFocus";
-import type { AppState } from "../../types";
+
 import { activeEyeDropperAtom } from "../EyeDropper";
 import { PropertiesPopover } from "../PropertiesPopover";
 import { useExcalidrawContainer, useStylesPanelMode } from "../App";
@@ -19,6 +19,8 @@ import { ColorInput } from "./ColorInput";
 import { Picker } from "./Picker";
 import PickerHeading from "./PickerHeading";
 import { activeColorPickerSectionAtom } from "./colorPickerUtils";
+
+import type { AppState } from "../../types";
 
 import type { ColorPickerType } from "./colorPickerUtils";
 

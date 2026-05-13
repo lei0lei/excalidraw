@@ -206,6 +206,8 @@ import {
   updateUmlDiagramTemplateInScene,
   type BarChartTemplateData,
   type ChartGraphicPreset,
+  type LineChartTemplateData,
+  type PieChartTemplateData,
   type UmlClassTemplateData,
   type UmlClassTemplatePreset,
   type UmlDiagramTemplateData,
@@ -213,6 +215,8 @@ import {
   sanitizeBarChartRootWhenFrameBorderDisabled,
   sanitizeBarChartTemplateInnerStrokeStyles,
   updateBarChartTemplateInScene,
+  updateLineChartTemplateInScene,
+  updatePieChartTemplateInScene,
 } from "./templates";
 import { EXCALIDRAW_APP_CUSTOM_TOOLBAR_ITEMS } from "./excalidrawCustomToolbar";
 
@@ -653,6 +657,10 @@ const ExcalidrawWrapper = () => {
     useState<ChartGraphicPreset | null>(null);
   const [selectedBarChartTemplateData, setSelectedBarChartTemplateData] =
     useState<BarChartTemplateData | null>(null);
+  const [selectedLineChartTemplateData, setSelectedLineChartTemplateData] =
+    useState<LineChartTemplateData | null>(null);
+  const [selectedPieChartTemplateData, setSelectedPieChartTemplateData] =
+    useState<PieChartTemplateData | null>(null);
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -705,6 +713,8 @@ const ExcalidrawWrapper = () => {
     setSelectedChartGraphicRootId,
     setSelectedChartGraphicPreset,
     setSelectedBarChartTemplateData,
+    setSelectedLineChartTemplateData,
+    setSelectedPieChartTemplateData,
   });
 
   const { syncEmbeddableToolbarFromSidebar } = useEmbeddableToolbarSync({
@@ -1511,6 +1521,66 @@ const ExcalidrawWrapper = () => {
       }
 
       const nextElements = updateBarChartTemplateInScene(
+        excalidrawAPI.getSceneElementsIncludingDeleted(),
+        selectedChartGraphicRootId,
+        data,
+        excalidrawAPI.getAppState(),
+      );
+
+      excalidrawAPI.updateScene({
+        elements: nextElements,
+        appState: {
+          selectedElementIds: {
+            [selectedChartGraphicRootId]: true,
+          },
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [excalidrawAPI, selectedChartGraphicPreset, selectedChartGraphicRootId],
+  );
+
+  const handleUpdateSelectedLineChart = useCallback(
+    (data: LineChartTemplateData) => {
+      if (!excalidrawAPI || !selectedChartGraphicRootId) {
+        return;
+      }
+
+      if (selectedChartGraphicPreset !== "line-chart") {
+        return;
+      }
+
+      const nextElements = updateLineChartTemplateInScene(
+        excalidrawAPI.getSceneElementsIncludingDeleted(),
+        selectedChartGraphicRootId,
+        data,
+        excalidrawAPI.getAppState(),
+      );
+
+      excalidrawAPI.updateScene({
+        elements: nextElements,
+        appState: {
+          selectedElementIds: {
+            [selectedChartGraphicRootId]: true,
+          },
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [excalidrawAPI, selectedChartGraphicPreset, selectedChartGraphicRootId],
+  );
+
+  const handleUpdateSelectedPieChart = useCallback(
+    (data: PieChartTemplateData) => {
+      if (!excalidrawAPI || !selectedChartGraphicRootId) {
+        return;
+      }
+
+      if (selectedChartGraphicPreset !== "pie-chart") {
+        return;
+      }
+
+      const nextElements = updatePieChartTemplateInScene(
         excalidrawAPI.getSceneElementsIncludingDeleted(),
         selectedChartGraphicRootId,
         data,
@@ -3307,7 +3377,11 @@ const ExcalidrawWrapper = () => {
           chartGraphicPreset={selectedChartGraphicPreset}
           barChartTemplateData={selectedBarChartTemplateData}
           onBarChartTemplateChange={handleUpdateSelectedBarChart}
-          barChartTemplateRootId={selectedChartGraphicRootId}
+          lineChartTemplateData={selectedLineChartTemplateData}
+          onLineChartTemplateChange={handleUpdateSelectedLineChart}
+          pieChartTemplateData={selectedPieChartTemplateData}
+          onPieChartTemplateChange={handleUpdateSelectedPieChart}
+          chartTemplateRootId={selectedChartGraphicRootId}
         />
 
         {mathFormulaDialogState && (

@@ -802,6 +802,22 @@
     "itemHeight": "相对高度",
     "newItemName": "新柱形"
   },
+  "lineChartTemplate": {
+    "items": "折线数据点",
+    "addItem": "添加数据点",
+    "removeItem": "删除数据点",
+    "itemName": "名称（沿分类基线）",
+    "itemValue": "相对数值",
+    "newItemName": "新数据点"
+  },
+  "pieChartTemplate": {
+    "items": "扇区",
+    "addItem": "添加扇区",
+    "removeItem": "删除扇区",
+    "itemName": "扇区名称",
+    "itemShare": "相对占比",
+    "newItemName": "新扇区"
+  },
   "fontList": {
     "badge": {
       "old": "旧的"

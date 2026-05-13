@@ -11,6 +11,8 @@ import type { AppState } from "@excalidraw/excalidraw/types";
 import { elementSharesAnyGroupId } from "../shared/templateInstanceGroups";
 
 import type { BarChartTemplateData } from "./bar-chart-types";
+import type { LineChartTemplateData } from "./line-chart-types";
+import type { PieChartTemplateData } from "./pie-chart-types";
 
 /** Insertable chart sketch presets (aligned with chart-graphic builders). */
 export type ChartGraphicPreset =
@@ -31,6 +33,10 @@ export type ChartGraphicTemplateCustomDataRoot = {
   barChartTemplateData?: BarChartTemplateData;
   /** Preserves chart frame stroke colour when the frame border master switch is off (stroke is forced transparent). */
   barChartFrameStrokeColorCache?: string;
+  lineChartTemplateData?: LineChartTemplateData;
+  lineChartFrameStrokeColorCache?: string;
+  pieChartTemplateData?: PieChartTemplateData;
+  pieChartFrameStrokeColorCache?: string;
 };
 
 export type ChartGraphicTemplateCustomDataChild = {
@@ -38,6 +44,11 @@ export type ChartGraphicTemplateCustomDataChild = {
   templateVersion: typeof CHART_GRAPHIC_TEMPLATE_VERSION;
   templateRole: "child";
   templateRootId: string;
+  /** Identifies the main series polyline for stroke sync across rebuilds. */
+  lineChartPart?: "series";
+  /** Identifies a pie slice for fill/stroke sync across rebuilds. */
+  pieChartPart?: "slice";
+  pieSliceItemId?: string;
 };
 
 export type ChartGraphicTemplateCustomData =
@@ -234,6 +245,10 @@ export const buildChartGraphicRootCustomData = (args: {
   preset: ChartGraphicPreset;
   barChartTemplateData?: BarChartTemplateData | null;
   barChartFrameStrokeColorCache?: string | null;
+  lineChartTemplateData?: LineChartTemplateData | null;
+  lineChartFrameStrokeColorCache?: string | null;
+  pieChartTemplateData?: PieChartTemplateData | null;
+  pieChartFrameStrokeColorCache?: string | null;
 }): ChartGraphicTemplateCustomDataRoot => {
   const base: ChartGraphicTemplateCustomDataRoot = {
     templateType: CHART_GRAPHIC_TEMPLATE_TYPE,
@@ -255,6 +270,32 @@ export const buildChartGraphicRootCustomData = (args: {
     }
     return out;
   }
+  if (args.preset === "line-chart" && args.lineChartTemplateData != null) {
+    const out: ChartGraphicTemplateCustomDataRoot = {
+      ...base,
+      lineChartTemplateData: args.lineChartTemplateData,
+    };
+    if (
+      typeof args.lineChartFrameStrokeColorCache === "string" &&
+      args.lineChartFrameStrokeColorCache.length > 0
+    ) {
+      out.lineChartFrameStrokeColorCache = args.lineChartFrameStrokeColorCache;
+    }
+    return out;
+  }
+  if (args.preset === "pie-chart" && args.pieChartTemplateData != null) {
+    const out: ChartGraphicTemplateCustomDataRoot = {
+      ...base,
+      pieChartTemplateData: args.pieChartTemplateData,
+    };
+    if (
+      typeof args.pieChartFrameStrokeColorCache === "string" &&
+      args.pieChartFrameStrokeColorCache.length > 0
+    ) {
+      out.pieChartFrameStrokeColorCache = args.pieChartFrameStrokeColorCache;
+    }
+    return out;
+  }
   return base;
 };
 
@@ -262,7 +303,11 @@ export const buildChartGraphicRootCustomData = (args: {
 export const tagChartGraphicElements = (
   elements: NonDeletedExcalidrawElement[],
   preset: ChartGraphicPreset,
-  options?: { barChartTemplateData?: BarChartTemplateData },
+  options?: {
+    barChartTemplateData?: BarChartTemplateData;
+    lineChartTemplateData?: LineChartTemplateData;
+    pieChartTemplateData?: PieChartTemplateData;
+  },
 ): NonDeletedExcalidrawElement[] => {
   if (!elements.length) {
     return elements;
@@ -279,6 +324,18 @@ export const tagChartGraphicElements = (
               ? {
                   barChartTemplateData:
                     options?.barChartTemplateData ?? undefined,
+                }
+              : {}),
+            ...(preset === "line-chart"
+              ? {
+                  lineChartTemplateData:
+                    options?.lineChartTemplateData ?? undefined,
+                }
+              : {}),
+            ...(preset === "pie-chart"
+              ? {
+                  pieChartTemplateData:
+                    options?.pieChartTemplateData ?? undefined,
                 }
               : {}),
           })
@@ -300,15 +357,21 @@ export const tagChartGraphicElements = (
 export const sanitizeBarChartTemplateInnerStrokeStyles = (
   elements: readonly ExcalidrawElement[],
 ): { next: ExcalidrawElement[]; didChange: boolean } => {
-  const barChartRootIds = new Set<string>();
+  const chartTemplateRootIds = new Set<string>();
   for (const el of elements) {
     const cd = getTemplateCustomData(el);
-    if (cd && cd.templateRole === "root" && cd.chartPreset === "bar-chart") {
-      barChartRootIds.add(el.id);
+    if (
+      cd &&
+      cd.templateRole === "root" &&
+      (cd.chartPreset === "bar-chart" ||
+        cd.chartPreset === "line-chart" ||
+        cd.chartPreset === "pie-chart")
+    ) {
+      chartTemplateRootIds.add(el.id);
     }
   }
 
-  if (barChartRootIds.size === 0) {
+  if (chartTemplateRootIds.size === 0) {
     return { next: elements as ExcalidrawElement[], didChange: false };
   }
 
@@ -318,7 +381,7 @@ export const sanitizeBarChartTemplateInnerStrokeStyles = (
     if (
       !cd ||
       cd.templateRole !== "child" ||
-      !barChartRootIds.has(cd.templateRootId)
+      !chartTemplateRootIds.has(cd.templateRootId)
     ) {
       return el;
     }
@@ -347,9 +410,18 @@ export const sanitizeBarChartRootWhenFrameBorderDisabled = (
     if (
       !cd ||
       cd.templateRole !== "root" ||
-      cd.chartPreset !== "bar-chart" ||
-      !cd.barChartTemplateData ||
-      cd.barChartTemplateData.frameBorderEnabled !== false
+      (cd.chartPreset !== "bar-chart" &&
+        cd.chartPreset !== "line-chart" &&
+        cd.chartPreset !== "pie-chart") ||
+      (cd.chartPreset === "bar-chart" &&
+        (!cd.barChartTemplateData ||
+          cd.barChartTemplateData.frameBorderEnabled !== false)) ||
+      (cd.chartPreset === "line-chart" &&
+        (!cd.lineChartTemplateData ||
+          cd.lineChartTemplateData.frameBorderEnabled !== false)) ||
+      (cd.chartPreset === "pie-chart" &&
+        (!cd.pieChartTemplateData ||
+          cd.pieChartTemplateData.frameBorderEnabled !== false))
     ) {
       return el;
     }
@@ -359,28 +431,55 @@ export const sanitizeBarChartRootWhenFrameBorderDisabled = (
 
     const rect = el as ExcalidrawRectangleElement;
     const rootCd = cd as ChartGraphicTemplateCustomDataRoot;
-    const templateData = rootCd.barChartTemplateData!;
+    const preset = rootCd.chartPreset;
 
-    let strokeCache = rootCd.barChartFrameStrokeColorCache;
+    let strokeCache =
+      preset === "bar-chart"
+        ? rootCd.barChartFrameStrokeColorCache
+        : preset === "line-chart"
+        ? rootCd.lineChartFrameStrokeColorCache
+        : rootCd.pieChartFrameStrokeColorCache;
     if (!isTransparent(rect.strokeColor)) {
       strokeCache = rect.strokeColor;
     }
 
+    const prevCache =
+      preset === "bar-chart"
+        ? rootCd.barChartFrameStrokeColorCache
+        : preset === "line-chart"
+        ? rootCd.lineChartFrameStrokeColorCache
+        : rootCd.pieChartFrameStrokeColorCache;
+
     const mustHideStroke =
       rect.strokeWidth !== 0 || !isTransparent(rect.strokeColor);
-    const cacheDirty = strokeCache !== rootCd.barChartFrameStrokeColorCache;
+    const cacheDirty = strokeCache !== prevCache;
 
     if (!mustHideStroke && !cacheDirty) {
       return el;
     }
 
     didChange = true;
-    const customData = buildChartGraphicRootCustomData({
-      rootId: el.id,
-      preset: "bar-chart",
-      barChartTemplateData: templateData,
-      barChartFrameStrokeColorCache: strokeCache ?? null,
-    });
+    const customData =
+      preset === "bar-chart"
+        ? buildChartGraphicRootCustomData({
+            rootId: el.id,
+            preset: "bar-chart",
+            barChartTemplateData: rootCd.barChartTemplateData!,
+            barChartFrameStrokeColorCache: strokeCache ?? null,
+          })
+        : preset === "line-chart"
+        ? buildChartGraphicRootCustomData({
+            rootId: el.id,
+            preset: "line-chart",
+            lineChartTemplateData: rootCd.lineChartTemplateData!,
+            lineChartFrameStrokeColorCache: strokeCache ?? null,
+          })
+        : buildChartGraphicRootCustomData({
+            rootId: el.id,
+            preset: "pie-chart",
+            pieChartTemplateData: rootCd.pieChartTemplateData!,
+            pieChartFrameStrokeColorCache: strokeCache ?? null,
+          });
 
     if (!mustHideStroke) {
       return newElementWith(el, { customData }, true);

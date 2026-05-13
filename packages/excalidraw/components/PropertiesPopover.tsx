@@ -60,15 +60,10 @@ export const PropertiesPopover = React.forwardRef<
     const isMobilePortrait =
       editorInterface.formFactor === "phone" && !editorInterface.isLandscape;
 
-    const side = isMobilePortrait
-      ? "bottom"
-      : desktopSide ?? "right";
-    const align = isMobilePortrait
-      ? "center"
-      : desktopAlign ?? "start";
+    const side = isMobilePortrait ? "bottom" : desktopSide ?? "right";
+    const align = isMobilePortrait ? "center" : desktopAlign ?? "start";
     const sideOffset = sideOffsetProp ?? 20;
-    const alignOffset =
-      alignOffsetProp ?? (isMobilePortrait ? 0 : -16);
+    const alignOffset = alignOffsetProp ?? (isMobilePortrait ? 0 : -16);
 
     return (
       <Popover.Portal container={container}>

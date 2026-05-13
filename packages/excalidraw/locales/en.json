@@ -822,6 +822,22 @@
     "itemHeight": "Relative height",
     "newItemName": "New bar"
   },
+  "lineChartTemplate": {
+    "items": "Points",
+    "addItem": "Add point",
+    "removeItem": "Remove point",
+    "itemName": "Name (along baseline)",
+    "itemValue": "Relative value",
+    "newItemName": "New point"
+  },
+  "pieChartTemplate": {
+    "items": "Segments",
+    "addItem": "Add segment",
+    "removeItem": "Remove segment",
+    "itemName": "Segment name",
+    "itemShare": "Relative share",
+    "newItemName": "New segment"
+  },
   "fontList": {
     "badge": {
       "old": "old"

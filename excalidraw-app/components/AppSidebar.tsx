@@ -14,6 +14,8 @@ import "./AppSidebar.scss";
 import type {
   BarChartTemplateData,
   ChartGraphicPreset,
+  LineChartTemplateData,
+  PieChartTemplateData,
   UmlClassTemplateData,
   UmlDiagramTemplateData,
 } from "../templates";
@@ -45,7 +47,11 @@ export const AppSidebar = ({
   chartGraphicPreset,
   barChartTemplateData,
   onBarChartTemplateChange,
-  barChartTemplateRootId,
+  lineChartTemplateData,
+  onLineChartTemplateChange,
+  pieChartTemplateData,
+  onPieChartTemplateChange,
+  chartTemplateRootId,
 }: {
   onOpenWorkspace: () => void;
   onInstallPWA?: () => void;
@@ -57,7 +63,11 @@ export const AppSidebar = ({
   chartGraphicPreset?: ChartGraphicPreset | null;
   barChartTemplateData?: BarChartTemplateData | null;
   onBarChartTemplateChange?: (data: BarChartTemplateData) => void;
-  barChartTemplateRootId?: string | null;
+  lineChartTemplateData?: LineChartTemplateData | null;
+  onLineChartTemplateChange?: (data: LineChartTemplateData) => void;
+  pieChartTemplateData?: PieChartTemplateData | null;
+  onPieChartTemplateChange?: (data: PieChartTemplateData) => void;
+  chartTemplateRootId?: string | null;
 }) => {
   const shouldShowTemplateEditor =
     (umlTemplateData && onChangeUmlTemplate) ||
@@ -110,7 +120,11 @@ export const AppSidebar = ({
               preset={chartGraphicPreset}
               barChartData={barChartTemplateData}
               onBarChartChange={onBarChartTemplateChange}
-              barChartTemplateRootId={barChartTemplateRootId}
+              lineChartData={lineChartTemplateData}
+              onLineChartChange={onLineChartTemplateChange}
+              pieChartData={pieChartTemplateData}
+              onPieChartChange={onPieChartTemplateChange}
+              chartTemplateRootId={chartTemplateRootId}
             />
           ) : null}
         </Sidebar.Tab>

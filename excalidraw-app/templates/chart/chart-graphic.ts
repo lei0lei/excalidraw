@@ -15,6 +15,14 @@ import {
   createDefaultBarChartTemplateData,
 } from "./bar-chart-template";
 import {
+  buildInitialLineChartElements,
+  createDefaultLineChartTemplateData,
+} from "./line-chart-template";
+import {
+  buildInitialPieChartElements,
+  createDefaultPieChartTemplateData,
+} from "./pie-chart-template";
+import {
   tagChartGraphicElements,
   type ChartGraphicPreset,
 } from "./chart-graphic-metadata";
@@ -23,7 +31,6 @@ export type { ChartGraphicPreset } from "./chart-graphic-metadata";
 
 const STROKE = "#374151";
 const MUTED = "#9ca3af";
-const ACCENT = "#6366f1";
 const CHART_FONT = FONT_FAMILY.Helvetica;
 
 const FRAME_W = 360;
@@ -58,15 +65,43 @@ export const createChartGraphic = (
     });
   }
 
+  if (preset === "line-chart") {
+    const left = centerX - BAR_CHART_FRAME_W / 2;
+    const top = centerY - BAR_CHART_FRAME_H / 2;
+    const lineData = createDefaultLineChartTemplateData();
+    const rawElements = buildInitialLineChartElements({
+      frameX: left,
+      frameY: top,
+      groupIds,
+      data: lineData,
+      appState,
+    });
+    return tagChartGraphicElements(rawElements, preset, {
+      lineChartTemplateData: lineData,
+    });
+  }
+
+  if (preset === "pie-chart") {
+    const left = centerX - BAR_CHART_FRAME_W / 2;
+    const top = centerY - BAR_CHART_FRAME_H / 2;
+    const pieData = createDefaultPieChartTemplateData();
+    const rawElements = buildInitialPieChartElements({
+      frameX: left,
+      frameY: top,
+      groupIds,
+      data: pieData,
+      appState,
+    });
+    return tagChartGraphicElements(rawElements, preset, {
+      pieChartTemplateData: pieData,
+    });
+  }
+
   const left = centerX - FRAME_W / 2;
   const top = centerY - FRAME_H / 2;
 
   const rawElements = ((): NonDeletedExcalidrawElement[] => {
     switch (preset) {
-      case "line-chart":
-        return createLineChart(left, top, groupIds);
-      case "pie-chart":
-        return createPieChart(left, top, groupIds);
       case "matrix-2x2":
       default:
         return createMatrix2x2(left, top, groupIds);
@@ -124,180 +159,6 @@ const axisLine = (
     points: rest.points as any,
   });
 };
-
-function createLineChart(
-  left: number,
-  top: number,
-  groupIds: string[],
-): NonDeletedExcalidrawElement[] {
-  const els: NonDeletedExcalidrawElement[] = [];
-  els.push(frame(left, top, groupIds));
-
-  els.push(
-    newTextElement({
-      x: left + FRAME_W / 2,
-      y: top + 18,
-      text: "Line chart",
-      fontSize: 18,
-      fontFamily: CHART_FONT,
-      textAlign: "center",
-      strokeColor: "#111827",
-      groupIds,
-    }),
-  );
-
-  const bx0 = left + plotLeft;
-  const by0 = top + plotTop;
-
-  els.push(
-    axisLine({
-      x: bx0,
-      y: by0 + plotH,
-      width: plotW,
-      height: 0,
-      points: [
-        [0, 0],
-        [plotW, 0],
-      ],
-      groupIds,
-    }),
-  );
-  els.push(
-    axisLine({
-      x: bx0,
-      y: by0,
-      width: 0,
-      height: plotH,
-      points: [
-        [0, 0],
-        [0, plotH],
-      ],
-      groupIds,
-    }),
-  );
-
-  const normX = (t: number) => t * plotW;
-  const normY = (v: number) => (1 - v) * plotH;
-  const pts: [number, number][] = [
-    [0, 0.75],
-    [0.2, 0.45],
-    [0.4, 0.55],
-    [0.55, 0.25],
-    [0.72, 0.4],
-    [1, 0.3],
-  ].map(([tx, ty]) => [normX(tx), normY(ty)]);
-
-  els.push(
-    newLinearElement({
-      type: "line",
-      x: bx0,
-      y: by0,
-      width: plotW,
-      height: plotH,
-      points: pts as any,
-      strokeColor: ACCENT,
-      strokeWidth: 2.5,
-      roughness: 0,
-      groupIds,
-    }),
-  );
-
-  for (const [px, py] of pts) {
-    els.push(
-      newElement({
-        type: "ellipse",
-        x: bx0 + px - 4,
-        y: by0 + py - 4,
-        width: 8,
-        height: 8,
-        strokeColor: ACCENT,
-        backgroundColor: "#ffffff",
-        fillStyle: "solid",
-        strokeWidth: 1.5,
-        roughness: 0,
-        groupIds,
-      }),
-    );
-  }
-
-  return els;
-}
-
-function createPieChart(
-  left: number,
-  top: number,
-  groupIds: string[],
-): NonDeletedExcalidrawElement[] {
-  const els: NonDeletedExcalidrawElement[] = [];
-  els.push(frame(left, top, groupIds));
-
-  els.push(
-    newTextElement({
-      x: left + FRAME_W / 2,
-      y: top + 18,
-      text: "Pie chart",
-      fontSize: 18,
-      fontFamily: CHART_FONT,
-      textAlign: "center",
-      strokeColor: "#111827",
-      groupIds,
-    }),
-  );
-
-  const cx = left + FRAME_W / 2;
-  const cy = top + FRAME_H / 2 + 6;
-  const r = 72;
-
-  els.push(
-    newElement({
-      type: "ellipse",
-      x: cx - r,
-      y: cy - r,
-      width: r * 2,
-      height: r * 2,
-      strokeColor: STROKE,
-      backgroundColor: "#eef2ff",
-      fillStyle: "solid",
-      strokeWidth: 1.5,
-      roughness: 0,
-      groupIds,
-    }),
-  );
-
-  const angles = [0, 65, 150, 240, 310].map((deg) => (deg * Math.PI) / 180);
-  for (const a of angles) {
-    els.push(
-      axisLine({
-        x: cx,
-        y: cy,
-        width: r * Math.cos(a),
-        height: r * Math.sin(a),
-        points: [
-          [0, 0],
-          [r * Math.cos(a), r * Math.sin(a)],
-        ],
-        strokeColor: MUTED,
-        strokeWidth: 1.25,
-        groupIds,
-      }),
-    );
-  }
-
-  els.push(
-    newTextElement({
-      x: cx,
-      y: cy + r + 28,
-      text: "Segments editable as shapes",
-      fontSize: 12,
-      fontFamily: CHART_FONT,
-      textAlign: "center",
-      strokeColor: "#6b7280",
-      groupIds,
-    }),
-  );
-
-  return els;
-}
 
 function createMatrix2x2(
   left: number,
