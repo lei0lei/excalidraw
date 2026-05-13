@@ -469,3 +469,147 @@
     ),
     linear-gradient(0deg, transparent 49.5%, #9ca3af 50%, transparent 50.5%);
 }
+
+.TemplateLibraryDialog__mindmapThumb {
+  width: 170px;
+  height: 104px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid rgba(55, 65, 81, 0.35);
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+}
+
+.TemplateLibraryDialog__mindmapThumb--radial {
+  background-image: linear-gradient(#9ca3af, #9ca3af),
+    linear-gradient(#9ca3af, #9ca3af), linear-gradient(#9ca3af, #9ca3af),
+    linear-gradient(#9ca3af, #9ca3af);
+  background-size: 1px 22px, 22px 1px, 1px 22px, 22px 1px;
+  background-position: 85px 12px, 124px 52px, 85px 82px, 46px 52px;
+  background-repeat: no-repeat;
+}
+
+.TemplateLibraryDialog__mindmapThumb--radial::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 22px;
+  margin: -11px 0 0 -22px;
+  border-radius: 6px;
+  background: #c7d2fe;
+  border: 1px solid #374151;
+}
+
+.TemplateLibraryDialog__mindmapThumb--radial::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+      circle at 50% 18%,
+      #d1fae5 0 5px,
+      #374151 5px 6px,
+      transparent 7px
+    ),
+    radial-gradient(
+      circle at 82% 50%,
+      #ffedd5 0 5px,
+      #374151 5px 6px,
+      transparent 7px
+    ),
+    radial-gradient(
+      circle at 50% 82%,
+      #fce7f3 0 5px,
+      #374151 5px 6px,
+      transparent 7px
+    ),
+    radial-gradient(
+      circle at 18% 50%,
+      #e0f2fe 0 5px,
+      #374151 5px 6px,
+      transparent 7px
+    );
+}
+
+.TemplateLibraryDialog__mindmapThumb--right-branches::before {
+  content: "";
+  position: absolute;
+  left: 22px;
+  top: 22px;
+  width: 28px;
+  height: 62px;
+  border-radius: 6px;
+  background: #c7d2fe;
+  border: 1px solid #374151;
+}
+
+.TemplateLibraryDialog__mindmapThumb--right-branches::after {
+  content: "";
+  position: absolute;
+  left: 58px;
+  top: 18px;
+  width: 96px;
+  height: 1px;
+  background: #9ca3af;
+  box-shadow: 0 28px 0 #9ca3af, 0 56px 0 #9ca3af;
+}
+
+.TemplateLibraryDialog__mindmapThumb--right-branches {
+  background-image: linear-gradient(#d1fae5, #d1fae5),
+    linear-gradient(#ffedd5, #ffedd5), linear-gradient(#fce7f3, #fce7f3);
+  background-size: 88px 18px, 88px 18px, 88px 18px;
+  background-position: 72px 16px, 72px 44px, 72px 72px;
+  background-repeat: no-repeat;
+  border-radius: 10px;
+}
+
+.TemplateLibraryDialog__mindmapThumb--top-down-tree::before {
+  content: "";
+  position: absolute;
+  left: 62px;
+  top: 14px;
+  width: 48px;
+  height: 18px;
+  border-radius: 5px;
+  background: #c7d2fe;
+  border: 1px solid #374151;
+}
+
+.TemplateLibraryDialog__mindmapThumb--top-down-tree::after {
+  content: "";
+  position: absolute;
+  left: 84px;
+  top: 32px;
+  width: 1px;
+  height: 18px;
+  background: #9ca3af;
+  box-shadow: -38px 36px 0 #9ca3af, 38px 36px 0 #9ca3af;
+}
+
+.TemplateLibraryDialog__mindmapThumb--top-down-tree {
+  background-image: linear-gradient(#d1fae5, #d1fae5),
+    linear-gradient(#ffedd5, #ffedd5), linear-gradient(#e0f2fe, #e0f2fe),
+    linear-gradient(#fce7f3, #fce7f3);
+  background-size: 36px 14px, 36px 14px, 36px 14px, 36px 14px;
+  background-position: 28px 58px, 106px 58px, 28px 82px, 106px 82px;
+  background-repeat: no-repeat;
+}
+
+.TemplateLibraryDialog__mindmapThumb--outline-spine {
+  background-image: linear-gradient(#9ca3af, #9ca3af);
+  background-size: 3px 76px;
+  background-position: 52px 14px;
+  background-repeat: no-repeat;
+}
+
+.TemplateLibraryDialog__mindmapThumb--outline-spine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#d1fae5, #d1fae5) 62px 16px / 72px 14px no-repeat,
+    linear-gradient(#ffedd5, #ffedd5) 10px 40px / 72px 14px no-repeat,
+    linear-gradient(#e0f2fe, #e0f2fe) 62px 64px / 72px 14px no-repeat,
+    linear-gradient(#fce7f3, #fce7f3) 10px 88px / 72px 14px no-repeat;
+}

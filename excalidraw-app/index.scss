@@ -569,9 +569,7 @@
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease;
 
   &:hover {
     background: rgba(98, 94, 224, 0.1);

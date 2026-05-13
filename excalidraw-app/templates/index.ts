@@ -7,3 +7,4 @@
 export * from "./shared";
 export * from "./uml";
 export * from "./chart";
+export * from "./mindmap";

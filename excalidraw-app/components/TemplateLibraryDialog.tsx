@@ -1,87 +1,123 @@
 import { Dialog } from "@excalidraw/excalidraw/components/Dialog";
 import DialogActionButton from "@excalidraw/excalidraw/components/DialogActionButton";
+import { type TranslationKeys, t } from "@excalidraw/excalidraw/i18n";
 import { useState } from "react";
 
 import "./TemplateLibraryDialog.scss";
 
 import type {
   ChartGraphicPreset,
+  MindMapTemplatePreset,
   UmlClassTemplatePreset,
   UmlDiagramTemplatePreset,
 } from "../templates";
 
-type TemplateCategory = "uml" | "chart";
+type TemplateCategory = "uml" | "chart" | "mindmap";
 
 type TemplateLibraryDialogProps = {
   onClose: () => void;
   onInsertUmlClass: (preset: UmlClassTemplatePreset) => void;
   onInsertUmlDiagram: (preset: UmlDiagramTemplatePreset) => void;
   onInsertChartGraphic: (preset: ChartGraphicPreset) => void;
+  onInsertMindMap: (preset: MindMapTemplatePreset) => void;
 };
 
 const CHART_TEMPLATE_CARDS: Array<{
   preset: ChartGraphicPreset;
-  title: string;
-  description: string;
+  titleKey: TranslationKeys;
+  descriptionKey: TranslationKeys;
 }> = [
   {
     preset: "bar-chart",
-    title: "Bar chart",
-    description: "Placeholder axes and colored bars.",
+    titleKey: "toolBar.templateLibraryDialog.chartBarTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.chartBarDesc",
   },
   {
     preset: "line-chart",
-    title: "Line chart",
-    description: "Axes with a polyline trend and markers.",
+    titleKey: "toolBar.templateLibraryDialog.chartLineTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.chartLineDesc",
   },
   {
     preset: "pie-chart",
-    title: "Pie chart",
-    description: "Circle with slice guides (edit as shapes).",
+    titleKey: "toolBar.templateLibraryDialog.chartPieTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.chartPieDesc",
   },
 ];
 
-const UML_TEMPLATE_CARDS: Array<{
+type UmlClassCardDef = {
   preset: UmlClassTemplatePreset;
-  title: string;
-  description: string;
-  titleText: string;
-  stereotype?: string;
-  attributes?: string;
-  methods?: string;
-}> = [
+  titleKey: TranslationKeys;
+  descriptionKey: TranslationKeys;
+  previewNameKey: TranslationKeys;
+  stereotypeKey?: TranslationKeys;
+  previewAttrKey?: TranslationKeys;
+  previewMethodsKey?: TranslationKeys;
+};
+
+const UML_TEMPLATE_CARDS: UmlClassCardDef[] = [
   {
     preset: "class",
-    title: "Class",
-    description: "Standard UML class with attributes and methods.",
-    titleText: "ClassName",
-    attributes: "name: string",
-    methods: "method(): void",
+    titleKey: "toolBar.templateLibraryDialog.umlClassClassTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.umlClassClassDesc",
+    previewNameKey: "toolBar.templateLibraryDialog.umlClassClassPreviewName",
+    previewAttrKey: "toolBar.templateLibraryDialog.umlClassClassPreviewAttr",
+    previewMethodsKey:
+      "toolBar.templateLibraryDialog.umlClassClassPreviewMethods",
   },
   {
     preset: "interface",
-    title: "Interface",
-    description: "Interface contract block for service or API definitions.",
-    titleText: "IService",
-    stereotype: "interface",
-    methods: "execute(): Promise<void>",
+    titleKey: "toolBar.templateLibraryDialog.umlClassInterfaceTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.umlClassInterfaceDesc",
+    previewNameKey:
+      "toolBar.templateLibraryDialog.umlClassInterfacePreviewName",
+    stereotypeKey: "toolBar.templateLibraryDialog.umlClassInterfaceStereotype",
+    previewMethodsKey:
+      "toolBar.templateLibraryDialog.umlClassInterfacePreviewMethods",
   },
   {
     preset: "abstract-class",
-    title: "Abstract class",
-    description: "Base class template for shared state and behavior.",
-    titleText: "BaseService",
-    stereotype: "abstract",
-    attributes: "repository: Repository",
-    methods: "run(): void",
+    titleKey: "toolBar.templateLibraryDialog.umlClassAbstractTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.umlClassAbstractDesc",
+    previewNameKey: "toolBar.templateLibraryDialog.umlClassAbstractPreviewName",
+    stereotypeKey: "toolBar.templateLibraryDialog.umlClassAbstractStereotype",
+    previewAttrKey: "toolBar.templateLibraryDialog.umlClassAbstractPreviewAttr",
+    previewMethodsKey:
+      "toolBar.templateLibraryDialog.umlClassAbstractPreviewMethods",
   },
   {
     preset: "enum",
-    title: "Enum",
-    description: "Enumeration template for fixed value sets.",
-    titleText: "Status",
-    stereotype: "enum",
-    attributes: "Pending\nRunning\nDone",
+    titleKey: "toolBar.templateLibraryDialog.umlClassEnumTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.umlClassEnumDesc",
+    previewNameKey: "toolBar.templateLibraryDialog.umlClassEnumPreviewName",
+    stereotypeKey: "toolBar.templateLibraryDialog.umlClassEnumStereotype",
+    previewAttrKey: "toolBar.templateLibraryDialog.umlClassEnumPreviewAttr",
+  },
+];
+
+const MIND_MAP_TEMPLATE_CARDS: Array<{
+  preset: MindMapTemplatePreset;
+  titleKey: TranslationKeys;
+  descriptionKey: TranslationKeys;
+}> = [
+  {
+    preset: "radial",
+    titleKey: "toolBar.templateLibraryDialog.mindRadialTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.mindRadialDesc",
+  },
+  {
+    preset: "right-branches",
+    titleKey: "toolBar.templateLibraryDialog.mindRightBranchesTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.mindRightBranchesDesc",
+  },
+  {
+    preset: "top-down-tree",
+    titleKey: "toolBar.templateLibraryDialog.mindTopDownTreeTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.mindTopDownTreeDesc",
+  },
+  {
+    preset: "outline-spine",
+    titleKey: "toolBar.templateLibraryDialog.mindOutlineSpineTitle",
+    descriptionKey: "toolBar.templateLibraryDialog.mindOutlineSpineDesc",
   },
 ];
 
@@ -90,6 +126,7 @@ export const TemplateLibraryDialog = ({
   onInsertUmlClass,
   onInsertUmlDiagram,
   onInsertChartGraphic,
+  onInsertMindMap,
 }: TemplateLibraryDialogProps) => {
   const [selectedCategory, setSelectedCategory] =
     useState<TemplateCategory>("uml");
@@ -98,7 +135,7 @@ export const TemplateLibraryDialog = ({
     <Dialog
       size="regular"
       className="TemplateLibraryDialog__dialog"
-      title="Template library"
+      title={t("toolBar.templateLibrary")}
       onCloseRequest={onClose}
       autofocus={false}
       closeOnClickOutside={true}
@@ -111,7 +148,7 @@ export const TemplateLibraryDialog = ({
             data-active={selectedCategory === "uml"}
             onClick={() => setSelectedCategory("uml")}
           >
-            UML
+            {t("toolBar.templateLibraryDialog.catUml")}
           </button>
           <button
             type="button"
@@ -119,7 +156,15 @@ export const TemplateLibraryDialog = ({
             data-active={selectedCategory === "chart"}
             onClick={() => setSelectedCategory("chart")}
           >
-            Charts
+            {t("toolBar.templateLibraryDialog.catCharts")}
+          </button>
+          <button
+            type="button"
+            className="TemplateLibraryDialog__category"
+            data-active={selectedCategory === "mindmap"}
+            onClick={() => setSelectedCategory("mindmap")}
+          >
+            {t("toolBar.templateLibraryDialog.catMindMaps")}
           </button>
         </div>
 
@@ -136,36 +181,36 @@ export const TemplateLibraryDialog = ({
                   <div className="TemplateLibraryDialog__cardPreview">
                     <div className="TemplateLibraryDialog__umlBox">
                       <div className="TemplateLibraryDialog__umlTitle">
-                        {card.stereotype && (
+                        {card.stereotypeKey && (
                           <div className="TemplateLibraryDialog__umlStereotype">
-                            {`<<${card.stereotype}>>`}
+                            {`<<${t(card.stereotypeKey)}>>`}
                           </div>
                         )}
-                        <div>{card.titleText}</div>
+                        <div>{t(card.previewNameKey)}</div>
                       </div>
-                      {card.attributes !== undefined && (
+                      {card.previewAttrKey !== undefined && (
                         <>
                           <div className="TemplateLibraryDialog__umlDivider" />
                           <div className="TemplateLibraryDialog__umlBody">
-                            {card.attributes}
+                            {t(card.previewAttrKey)}
                           </div>
                         </>
                       )}
-                      {card.methods !== undefined && (
+                      {card.previewMethodsKey !== undefined && (
                         <>
                           <div className="TemplateLibraryDialog__umlDivider" />
                           <div className="TemplateLibraryDialog__umlBody">
-                            {card.methods}
+                            {t(card.previewMethodsKey)}
                           </div>
                         </>
                       )}
                     </div>
                   </div>
                   <div className="TemplateLibraryDialog__cardTitle">
-                    {card.title}
+                    {t(card.titleKey)}
                   </div>
                   <div className="TemplateLibraryDialog__cardDescription">
-                    {card.description}
+                    {t(card.descriptionKey)}
                   </div>
                 </button>
               ))}
@@ -183,9 +228,11 @@ export const TemplateLibraryDialog = ({
                     <div className="TemplateLibraryDialog__umlActorLegRight" />
                   </div>
                 </div>
-                <div className="TemplateLibraryDialog__cardTitle">Actor</div>
+                <div className="TemplateLibraryDialog__cardTitle">
+                  {t("toolBar.templateLibraryDialog.umlDiagramActorTitle")}
+                </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Stick figure actor for use case diagrams.
+                  {t("toolBar.templateLibraryDialog.umlDiagramActorDesc")}
                 </div>
               </button>
 
@@ -196,12 +243,16 @@ export const TemplateLibraryDialog = ({
               >
                 <div className="TemplateLibraryDialog__cardPreview">
                   <div className="TemplateLibraryDialog__umlUseCasePreview">
-                    Use Case
+                    {t(
+                      "toolBar.templateLibraryDialog.umlDiagramUseCasePreview",
+                    )}
                   </div>
                 </div>
-                <div className="TemplateLibraryDialog__cardTitle">Use case</div>
+                <div className="TemplateLibraryDialog__cardTitle">
+                  {t("toolBar.templateLibraryDialog.umlDiagramUseCaseTitle")}
+                </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Ellipse template for use case diagrams.
+                  {t("toolBar.templateLibraryDialog.umlDiagramUseCaseDesc")}
                 </div>
               </button>
 
@@ -214,13 +265,17 @@ export const TemplateLibraryDialog = ({
                   <div className="TemplateLibraryDialog__umlPackagePreview">
                     <div className="TemplateLibraryDialog__umlPackageTab" />
                     <div className="TemplateLibraryDialog__umlPackageBody">
-                      Package
+                      {t(
+                        "toolBar.templateLibraryDialog.umlDiagramPackagePreview",
+                      )}
                     </div>
                   </div>
                 </div>
-                <div className="TemplateLibraryDialog__cardTitle">Package</div>
+                <div className="TemplateLibraryDialog__cardTitle">
+                  {t("toolBar.templateLibraryDialog.umlDiagramPackageTitle")}
+                </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Package block for grouping classes or components.
+                  {t("toolBar.templateLibraryDialog.umlDiagramPackageDesc")}
                 </div>
               </button>
 
@@ -232,12 +287,16 @@ export const TemplateLibraryDialog = ({
                 <div className="TemplateLibraryDialog__cardPreview">
                   <div className="TemplateLibraryDialog__umlNotePreview">
                     <div className="TemplateLibraryDialog__umlNoteFold" />
-                    <span>Note</span>
+                    <span>
+                      {t("toolBar.templateLibraryDialog.umlDiagramNotePreview")}
+                    </span>
                   </div>
                 </div>
-                <div className="TemplateLibraryDialog__cardTitle">Note</div>
+                <div className="TemplateLibraryDialog__cardTitle">
+                  {t("toolBar.templateLibraryDialog.umlDiagramNoteTitle")}
+                </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  UML note block for annotations.
+                  {t("toolBar.templateLibraryDialog.umlDiagramNoteDesc")}
                 </div>
               </button>
 
@@ -250,14 +309,18 @@ export const TemplateLibraryDialog = ({
                   <div className="TemplateLibraryDialog__umlComponentPreview">
                     <div className="TemplateLibraryDialog__umlComponentPort TemplateLibraryDialog__umlComponentPort--top" />
                     <div className="TemplateLibraryDialog__umlComponentPort TemplateLibraryDialog__umlComponentPort--bottom" />
-                    <span>Component</span>
+                    <span>
+                      {t(
+                        "toolBar.templateLibraryDialog.umlDiagramComponentPreview",
+                      )}
+                    </span>
                   </div>
                 </div>
                 <div className="TemplateLibraryDialog__cardTitle">
-                  Component
+                  {t("toolBar.templateLibraryDialog.umlDiagramComponentTitle")}
                 </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Component block for higher-level architecture diagrams.
+                  {t("toolBar.templateLibraryDialog.umlDiagramComponentDesc")}
                 </div>
               </button>
 
@@ -272,10 +335,12 @@ export const TemplateLibraryDialog = ({
                   </div>
                 </div>
                 <div className="TemplateLibraryDialog__cardTitle">
-                  Association
+                  {t(
+                    "toolBar.templateLibraryDialog.umlDiagramAssociationTitle",
+                  )}
                 </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Plain relationship line between UML elements.
+                  {t("toolBar.templateLibraryDialog.umlDiagramAssociationDesc")}
                 </div>
               </button>
 
@@ -290,10 +355,12 @@ export const TemplateLibraryDialog = ({
                   </div>
                 </div>
                 <div className="TemplateLibraryDialog__cardTitle">
-                  Inheritance
+                  {t(
+                    "toolBar.templateLibraryDialog.umlDiagramInheritanceTitle",
+                  )}
                 </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Generalization arrow with hollow triangle head.
+                  {t("toolBar.templateLibraryDialog.umlDiagramInheritanceDesc")}
                 </div>
               </button>
 
@@ -308,10 +375,12 @@ export const TemplateLibraryDialog = ({
                   </div>
                 </div>
                 <div className="TemplateLibraryDialog__cardTitle">
-                  Aggregation
+                  {t(
+                    "toolBar.templateLibraryDialog.umlDiagramAggregationTitle",
+                  )}
                 </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Shared ownership line with hollow diamond.
+                  {t("toolBar.templateLibraryDialog.umlDiagramAggregationDesc")}
                 </div>
               </button>
 
@@ -326,10 +395,12 @@ export const TemplateLibraryDialog = ({
                   </div>
                 </div>
                 <div className="TemplateLibraryDialog__cardTitle">
-                  Composition
+                  {t(
+                    "toolBar.templateLibraryDialog.umlDiagramCompositionTitle",
+                  )}
                 </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Strong ownership line with filled diamond.
+                  {t("toolBar.templateLibraryDialog.umlDiagramCompositionDesc")}
                 </div>
               </button>
 
@@ -344,10 +415,10 @@ export const TemplateLibraryDialog = ({
                   </div>
                 </div>
                 <div className="TemplateLibraryDialog__cardTitle">
-                  Dependency
+                  {t("toolBar.templateLibraryDialog.umlDiagramDependencyTitle")}
                 </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Dashed dependency arrow for loose coupling.
+                  {t("toolBar.templateLibraryDialog.umlDiagramDependencyDesc")}
                 </div>
               </button>
 
@@ -359,20 +430,22 @@ export const TemplateLibraryDialog = ({
                 <div className="TemplateLibraryDialog__cardPreview">
                   <div className="TemplateLibraryDialog__umlSequencePreview">
                     <div className="TemplateLibraryDialog__umlSequenceHeader">
-                      Participant
+                      {t(
+                        "toolBar.templateLibraryDialog.umlDiagramSequenceParticipant",
+                      )}
                     </div>
                     <div className="TemplateLibraryDialog__umlSequenceLine" />
                   </div>
                 </div>
                 <div className="TemplateLibraryDialog__cardTitle">
-                  Sequence lifeline
+                  {t("toolBar.templateLibraryDialog.umlDiagramSequenceTitle")}
                 </div>
                 <div className="TemplateLibraryDialog__cardDescription">
-                  Participant header and dashed lifeline for sequence diagrams.
+                  {t("toolBar.templateLibraryDialog.umlDiagramSequenceDesc")}
                 </div>
               </button>
             </div>
-          ) : (
+          ) : selectedCategory === "chart" ? (
             <div className="TemplateLibraryDialog__grid">
               {CHART_TEMPLATE_CARDS.map((card) => (
                 <button
@@ -387,10 +460,33 @@ export const TemplateLibraryDialog = ({
                     />
                   </div>
                   <div className="TemplateLibraryDialog__cardTitle">
-                    {card.title}
+                    {t(card.titleKey)}
                   </div>
                   <div className="TemplateLibraryDialog__cardDescription">
-                    {card.description}
+                    {t(card.descriptionKey)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="TemplateLibraryDialog__grid">
+              {MIND_MAP_TEMPLATE_CARDS.map((card) => (
+                <button
+                  key={card.preset}
+                  type="button"
+                  className="TemplateLibraryDialog__card"
+                  onClick={() => onInsertMindMap(card.preset)}
+                >
+                  <div className="TemplateLibraryDialog__cardPreview">
+                    <div
+                      className={`TemplateLibraryDialog__mindmapThumb TemplateLibraryDialog__mindmapThumb--${card.preset}`}
+                    />
+                  </div>
+                  <div className="TemplateLibraryDialog__cardTitle">
+                    {t(card.titleKey)}
+                  </div>
+                  <div className="TemplateLibraryDialog__cardDescription">
+                    {t(card.descriptionKey)}
                   </div>
                 </button>
               ))}
@@ -398,7 +494,7 @@ export const TemplateLibraryDialog = ({
           )}
 
           <div className="TemplateLibraryDialog__actions">
-            <DialogActionButton label="Close" onClick={onClose} />
+            <DialogActionButton label={t("buttons.close")} onClick={onClose} />
           </div>
         </div>
       </div>

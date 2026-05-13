@@ -195,6 +195,7 @@ import {
 import {
   createChartGraphic,
   createDefaultUmlClassTemplateData,
+  createMindMapTemplate,
   createUmlClassTemplate,
   createUmlDiagramTemplate,
   getUmlClassTemplateRootId,
@@ -207,6 +208,7 @@ import {
   type BarChartTemplateData,
   type ChartGraphicPreset,
   type LineChartTemplateData,
+  type MindMapTemplatePreset,
   type PieChartTemplateData,
   type UmlClassTemplateData,
   type UmlClassTemplatePreset,
@@ -1455,6 +1457,46 @@ const ExcalidrawWrapper = () => {
       excalidrawAPI.setActiveTool({ type: "selection" });
       excalidrawAPI.setToast({
         message: t("toolBar.templateInsertedChartGraphic", { preset }),
+      });
+    },
+    [excalidrawAPI],
+  );
+
+  const handleInsertMindMapTemplate = useCallback(
+    (preset: MindMapTemplatePreset) => {
+      if (!excalidrawAPI) {
+        throw new Error("Excalidraw editor is not ready yet.");
+      }
+
+      const appState =
+        currentAppStateRef.current || excalidrawAPI.getAppState();
+      const zoom = appState.zoom.value || 1;
+      const sceneCenterX = -appState.scrollX + appState.width / (2 * zoom);
+      const sceneCenterY = -appState.scrollY + appState.height / (2 * zoom);
+      const templateElements = createMindMapTemplate(
+        sceneCenterX - 210,
+        sceneCenterY - 154,
+        preset,
+      );
+
+      excalidrawAPI.updateScene({
+        elements: [
+          ...excalidrawAPI.getSceneElementsIncludingDeleted(),
+          ...templateElements,
+        ],
+        appState: {
+          selectedElementIds: Object.fromEntries(
+            templateElements.map((element) => [element.id, true]),
+          ),
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+
+      templateLibraryDialogOpenRef.current = false;
+      setIsTemplateLibraryDialogOpen(false);
+      excalidrawAPI.setActiveTool({ type: "selection" });
+      excalidrawAPI.setToast({
+        message: t("toolBar.templateInsertedMindMap", { preset }),
       });
     },
     [excalidrawAPI],
@@ -3400,6 +3442,7 @@ const ExcalidrawWrapper = () => {
             onInsertUmlClass={handleInsertUmlClassTemplate}
             onInsertUmlDiagram={handleInsertUmlDiagramTemplate}
             onInsertChartGraphic={handleInsertChartGraphic}
+            onInsertMindMap={handleInsertMindMapTemplate}
           />
         )}
 
